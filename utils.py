@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import numpy as np
 import re
+import scipy.io
 
 
 day_type = {'Mon': 'WD',
@@ -191,8 +192,6 @@ def houses_timeseries_to_mat(grid):
     Pload = np.array(Pload).T
     Qload = np.array(Qload).T
     PQloadname = np.array(PQloadname)
-
-    import scipy.io
 
     dict = {'Load_loc': load_loc,
             'phase_con': phase_con,

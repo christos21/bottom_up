@@ -6,10 +6,9 @@ import matplotlib.pyplot as plt
 
 
 import data_config
+import indexes
 from utils import day_type, natural_keys, phase_allocation, PHASES, pv_profile_generator, battery_function
-from indexes import mean_auto_consumption_rate, cover_factors, load_match_index, \
-    loss_of_load_probability, peaks_above_limit, no_grid_interaction_probability, one_percent_peak_power, \
-    capacity_factor, self_consumption_rate, self_sufficiency_rate, battery_utilization_index
+
 
 
 class SmartHome:
@@ -336,95 +335,169 @@ class SmartHome:
         self.grid_power = temp_pv - self.P - temp_bat_ch + temp_bat_dch
 
     def mean_auto_consumption_rate(self, battery=True):
+        """
+        Returns mean auto consumption rate. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        :param battery: bool
+        :return: np.Series
+        """
         if battery and self.has_battery:
-            r = mean_auto_consumption_rate(gen=self.PV,  # + self.battery['p_dch_bat'],
-                                           injected=self.total_grid_power.clip(0))
+            r = indexes.mean_auto_consumption_rate(gen=self.PV,  # + self.battery['p_dch_bat'],
+                                                   injected=self.total_grid_power.clip(0))
         else:
             injected_power = self.PV - self.P.sum(axis=1)
-            r = mean_auto_consumption_rate(gen=self.PV, injected=injected_power.clip(0))
+            r = indexes.mean_auto_consumption_rate(gen=self.PV, injected=injected_power.clip(0))
 
         return r
 
     def cover_factors(self, battery=True):
+        """
+        Returns cover factors. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        :param battery: bool
+        :return: (float, float)
+        """
         if battery and self.has_battery:
-            gamma_s, gamma_d = cover_factors(gen=self.PV + self.battery['p_dch_bat'],
-                                             load=self.P.sum(axis=1) + self.battery['p_ch_bat'])
+            gamma_s, gamma_d = indexes.cover_factors(gen=self.PV + self.battery['p_dch_bat'],
+                                                     load=self.P.sum(axis=1) + self.battery['p_ch_bat'])
         else:
-            gamma_s, gamma_d = cover_factors(gen=self.PV, load=self.P.sum(axis=1))
+            gamma_s, gamma_d = indexes.cover_factors(gen=self.PV, load=self.P.sum(axis=1))
 
         return gamma_s, gamma_d
 
     def load_match_index(self, interval='1h', battery=True):
+        """
+        Returns load match index. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        Parameter 'interval' is used for down-sampling.
+        :param interval: str
+        :param battery: bool
+        :return: pd.Series
+        """
         if battery and self.has_battery:
-            lmi = load_match_index(gen=self.PV + self.battery['p_dch_bat'],
-                                   load=self.P.sum(axis=1) + self.battery['p_ch_bat'],
-                                   interval=interval)
+            lmi = indexes.load_match_index(gen=self.PV + self.battery['p_dch_bat'],
+                                           load=self.P.sum(axis=1) + self.battery['p_ch_bat'],
+                                           interval=interval)
         else:
-            lmi = load_match_index(gen=self.PV, load=self.P.sum(axis=1), interval=interval)
+            lmi = indexes.load_match_index(gen=self.PV, load=self.P.sum(axis=1), interval=interval)
 
         return lmi
 
     def loss_of_load_probability(self, battery=True):
+        """
+        Returns loss of load probability. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        :param battery: bool
+        :return: float
+        """
         if battery and self.has_battery:
-            lolp = loss_of_load_probability(gen=self.PV + self.battery['p_dch_bat'],
-                                            load=self.P.sum(axis=1) + self.battery['p_ch_bat'])
+            lolp = indexes.loss_of_load_probability(gen=self.PV + self.battery['p_dch_bat'],
+                                                    load=self.P.sum(axis=1) + self.battery['p_ch_bat'])
         else:
-            lolp = loss_of_load_probability(gen=self.PV, load=self.P.sum(axis=1))
+            lolp = indexes.loss_of_load_probability(gen=self.PV, load=self.P.sum(axis=1))
 
         return lolp
 
     def peaks_above_limit(self, p_limit=5000, battery=True):
+        """
+        Returns peaks above limit. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        :param p_limit: float | int
+        :param battery: bool
+        :return: float
+        """
+
         if battery and self.has_battery:
-            pal = peaks_above_limit(p_exchange=self.total_grid_power, p_limit=p_limit)
+            pal = indexes.peaks_above_limit(p_exchange=self.total_grid_power, p_limit=p_limit)
         else:
-            pal = peaks_above_limit(p_exchange=self.PV - self.P.sum(axis=1), p_limit=p_limit)
+            pal = indexes.peaks_above_limit(p_exchange=self.PV - self.P.sum(axis=1), p_limit=p_limit)
         return pal
 
     def no_grid_interaction_probability(self, period='15min', limit=0.001, battery=True):
+        """
+        Returns no grid interaction probability. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        The argument 'period' is used for down-sampling.
+        The argument 'limit' is the power limit under which there is no interaction with the grid.
+        :param period: str
+        :param limit: float
+        :param battery: bool
+        :return: float
+        """
         if battery and self.has_battery:
-            ngip = no_grid_interaction_probability(p_exchange=self.total_grid_power,
-                                                   period=period, limit=limit)
+            ngip = indexes.no_grid_interaction_probability(p_exchange=self.total_grid_power,
+                                                           period=period, limit=limit)
         else:
-            ngip = no_grid_interaction_probability(p_exchange=self.PV - self.P.sum(axis=1),
-                                                   period=period, limit=limit)
+            ngip = indexes.no_grid_interaction_probability(p_exchange=self.PV - self.P.sum(axis=1),
+                                                           period=period, limit=limit)
         return ngip
 
     def one_percent_peak_power(self, period='1s', battery=True):
+        """
+        Returns one percent peak power. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV. The argument 'period' is used in case down-sampling is preferred.
+        :param period: str
+        :param battery: bool
+        :return: float
+        """
         if battery and self.has_battery:
-            opp = one_percent_peak_power(p_exchange=self.total_grid_power, period=period)
+            opp = indexes.one_percent_peak_power(p_exchange=self.total_grid_power, period=period)
         else:
-            opp = one_percent_peak_power(p_exchange=self.PV - self.P.sum(axis=1), period=period)
+            opp = indexes.one_percent_peak_power(p_exchange=self.PV - self.P.sum(axis=1), period=period)
         return opp
 
     def capacity_factor(self, battery=True):
+        """
+        Returns capacity factor. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        :param battery: bool
+        :return: float
+        """
         if battery and self.has_battery:
-            cf = capacity_factor(p_exchange=self.total_grid_power, p_cap=self.p_cap)
+            cf = indexes.capacity_factor(p_exchange=self.total_grid_power, p_cap=self.p_cap)
         else:
-            cf = capacity_factor(p_exchange=self.PV - self.P.sum(axis=1), p_cap=self.p_cap)
+            cf = indexes.capacity_factor(p_exchange=self.PV - self.P.sum(axis=1), p_cap=self.p_cap)
         return cf
 
     def self_consumption_rate(self, battery=True):
+        """
+        Returns self consumption rate. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        :param battery: bool
+        :return: float
+        """
         if battery and self.has_battery:
-            scr = self_consumption_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery['p_ch_bat'],
-                                        battery_discharge=self.battery['p_dch_bat'])
+            scr = indexes.self_consumption_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery['p_ch_bat'],
+                                                battery_discharge=self.battery['p_dch_bat'])
         else:
-            scr = self_consumption_rate(self.P.sum(axis=1), self.PV)
+            scr = indexes.self_consumption_rate(self.P.sum(axis=1), self.PV)
 
         return scr
 
     def self_sufficiency_rate(self, battery=True):
+        """
+        Returns self sufficiency rate. If 'battery' is False or the household has no battery,
+        the index is calculated considering only PV.
+        :param battery: bool
+        :return: float
+        """
         if battery and self.has_battery:
-            ssr = self_sufficiency_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery['p_ch_bat'],
-                                        battery_discharge=self.battery['p_dch_bat'])
+            ssr = indexes.self_sufficiency_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery['p_ch_bat'],
+                                                battery_discharge=self.battery['p_dch_bat'])
         else:
-            ssr = self_sufficiency_rate(self.P.sum(axis=1), self.PV)
+            ssr = indexes.self_sufficiency_rate(self.P.sum(axis=1), self.PV)
 
         return ssr
 
     def battery_utilization_index(self):
+        """
+        Returns battery utilization index for charging and discharging as a tuple.
+        If household has no battery, returns (None, None).
+        :return: (float, float) | (None, None)
+        """
         if self.has_battery:
-            bui = battery_utilization_index(self.battery['p_ch_bat'], self.battery['p_dch_bat'],
-                                            self.battery['e_max'], depth_of_discharge=max(1-self.battery['soc']))
+            bui = indexes.battery_utilization_index(self.battery['p_ch_bat'], self.battery['p_dch_bat'],
+                                                    self.battery['e_max'], depth_of_discharge=max(1-self.battery['soc']))
             bui_charge = bui[0]
             bui_discharge = bui[1]
         else:
@@ -433,6 +506,11 @@ class SmartHome:
         return bui_charge, bui_discharge
 
     def calculate_indexes(self):
+        """
+        Returns some end-user related indexes for PV-BESS assessment.
+        The indexes are calculated for two scenarios: a) only PV and b) PV and BESS.
+        :return: dict
+        """
 
         self.indexes['r_auto_without_battery'] = self.mean_auto_consumption_rate(battery=False)
         self.indexes['r_auto_with_battery'] = self.mean_auto_consumption_rate()
@@ -465,6 +543,12 @@ class SmartHome:
         self.indexes['capacity_factor_with_battery'] = self.capacity_factor()
 
     def plot_grid_power(self, phases=True):
+        """
+        Plots the total grid power (load - production).
+        If 'phases' is true each phase is plotted separately.
+        :param phases: boolean
+        :return:
+        """
         plt.figure()
         if phases:
             self.grid_power.plot()
@@ -475,36 +559,26 @@ class SmartHome:
         plt.show()
 
     def get_total_load(self):
+        """
+        Returns total active power (including battery charging) and reactive power.
+        :return: pd.Series, pd.Series
+        """
         p = self.P.sum(axis=1) + self.battery['p_ch_bat']
         q = self.Q.sum(axis=1)
         return p, q
 
     def get_total_production(self):
+        """
+        Returns power produced by PV and battery.
+        :return: pd.Series
+        """
         return self.PV + self.battery['p_dch_bat']
-    #
-    # def plot_active_power(self, phase=None):
-    #     plt.figure()
-    #     if phase:
-    #         self.P[phase].plot()
-    #         plt.title(self.name + ' phase ' + phase + ' - Active power', fontsize=20)
-    #     else:
-    #         p, _ = self.get_total_load()
-    #         p.plot()
-    #         plt.title(self.name + ' - Total active power', fontsize=20)
-    #     plt.show()
-    #
-    # def plot_reactive_power(self, phase=None):
-    #     plt.figure()
-    #     if phase:
-    #         self.Q[phase].plot()
-    #         plt.title(self.name + ' phase ' + phase + ' - Reactive power', fontsize=20)
-    #     else:
-    #         _, q = self.get_total_load()
-    #         q.plot()
-    #         plt.title(self.name + ' - Total reactive power', fontsize=20)
-    #     plt.show()
 
     def plot_load(self):
+        """
+        Plots household total active and reactive power.
+        :return:
+        """
         plt.figure()
         p, q = self.get_total_load()
         p.plot()
@@ -514,6 +588,10 @@ class SmartHome:
         plt.show()
 
     def plot_production(self):
+        """
+        Plots household total production (PV + battery).
+        :return:
+        """
         prod = self.get_total_production()
         plt.figure()
         prod.plot()
@@ -521,12 +599,20 @@ class SmartHome:
         plt.show()
 
     def plot_pv(self):
+        """
+        Plots household PV production.
+        :return:
+        """
         plt.figure()
         self.PV.plot()
         plt.title(self.name + ' - PV power', fontsize=20)
         plt.show()
 
     def plot_load_and_production(self):
+        """
+        Plots household total active power and total production (PV + battery) in a single figure.
+        :return:
+        """
         p, _ = self.get_total_load()
         plt.figure()
         p.plot()

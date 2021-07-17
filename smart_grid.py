@@ -159,6 +159,10 @@ class SmartGrid:
         return stats_dict, appliances
 
     def get_homes_with_pv(self):
+        """
+        Returns list of households with a PV.
+        :return: [str]
+        """
         homes_with_pv = []
         for home_id, home_obj in self.homes.items():
             if home_obj.has_pv:
@@ -167,6 +171,10 @@ class SmartGrid:
         return homes_with_pv
 
     def get_homes_with_battery(self):
+        """
+        Returns list of households with a battery energy storage system.
+        :return: [str]
+        """
         homes_with_battery = []
         for home_id, home_obj in self.homes.items():
             if home_obj.has_battery:
