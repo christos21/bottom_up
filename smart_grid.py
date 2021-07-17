@@ -70,9 +70,9 @@ class SmartGrid:
 
         for k, home in enumerate(self.homes.values()):
             if len(self.days) == 1:
-                home.set_single_day_aggregated_profile(self.profile_option, self.days[0], self.month)
+                home.set_single_day_aggregated_profile(self.profile_option, self.days[0])
             else:
-                home.set_multiple_days_aggregated_profile(self.days, self.month)
+                home.set_multiple_days_aggregated_profile(self.days)
 
             home.set_pv_and_battery(self.days, self.month)
 
@@ -222,12 +222,25 @@ class SmartGrid:
 
         transformer_power = pd.read_csv(os.path.join(path_to_results, 'transformer_power.csv'), index_col=0)
         s = transformer_power['P_s'] + transformer_power['Q_s']
+        # s = (transformer_power['P_s']**2 + transformer_power['Q_s']**2)**(1/2)
         self.indexes['src'] = substation_reserve_capacity(s, S_substation)
 
         line_power = pd.read_csv(os.path.join(path_to_results, 'line_power.csv'), index_col=0)
         self.indexes['afli'] = average_feeder_loading_index(line_power, line_length, line_c, total_length)
 
     def power_balance_index(self, bus_names, load_names, bus_connections, initial_bus):
+        """
+        Calculates power balance index as described in
+        'M. Hasheminamin, V. G. Agelidis, V. Salehi, R. Teodorescu and B. Hredzak, "Index-Based Assessment of Voltage
+        Rise and Reverse Power Flow Phenomena in a Distribution Feeder Under High PV Penetration," in IEEE Journal of
+        Photovoltaics, vol. 5, no. 4, pp. 1158-1168, July 2015'
+
+        :param bus_names:
+        :param load_names:
+        :param bus_connections:
+        :param initial_bus:
+        :return:
+        """
         recursive_power_balance_index = {bus: None for bus in bus_names}
 
         for bus in bus_names:

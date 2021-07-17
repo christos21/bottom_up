@@ -81,7 +81,7 @@ class SmartHome:
         self.simulation_appliances = []
         self.simulation_appliance_to_phase = {}
 
-    def set_single_day_aggregated_profile(self, profile_option, day, month):
+    def set_single_day_aggregated_profile(self, profile_option, day):
 
         p = pd.DataFrame(0, columns=list(PHASES.values()),
                          index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
@@ -157,18 +157,7 @@ class SmartHome:
         self.P = p
         self.Q = q
 
-        # if self.has_pv:
-        #     self.PV = pd.Series(data=self.pv_rated*pv_profile_generator(month), name=day,
-        #                         index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
-        #     self.PV *= 1000
-        # else:
-        #     self.PV = pd.Series(data=0, name=day,
-        #                         index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
-        #
-        # self.set_battery()
-        # self.calculate_grid_power()
-
-    def set_multiple_days_aggregated_profile(self, days, month=None):
+    def set_multiple_days_aggregated_profile(self, days):
         p = pd.DataFrame(0, columns=list(PHASES.values()),
                          index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days)*60*60*24))
 
@@ -224,20 +213,6 @@ class SmartHome:
 
         self.P = p
         self.Q = q
-
-        # self.PV = pd.Series(0, name=days[0] + '-' + days[-1],
-        #                     index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days)*60*60*24))
-        #
-        # if self.has_pv:
-        #     for k, day in enumerate(days):
-        #         start_index = str(k) + ' days'
-        #         end_index = start_index + ' 23:59:59'
-        #         self.PV[start_index:end_index] = self.pv_rated*pv_profile_generator(month)
-        #
-        #     self.PV *= 1000
-        #
-        # self.set_battery()
-        # self.calculate_grid_power()
 
     def set_pv(self, days, month):
         if len(days) == 1:
