@@ -10,16 +10,18 @@ import indexes
 from utils import day_type, natural_keys, phase_allocation, PHASES, pv_profile_generator, battery_function
 
 
-
 class SmartHome:
+    """
+    Class representing a smart home with solar panels and battery.
+    """
 
-    def __init__(self, home, home_info):
+    def __init__(self, bus_name, home_info):
         """
         Initialization of a smart home object.
-
+        :param bus_name: str
         :param home_info: pd.Series
         """
-        self.name = home
+        self.name = bus_name
         self.number_of_appliances = int(home_info['appliances'])
         self.appliances = [appliance for appliance in data_config.APPLIANCES if home_info[appliance]]
 
@@ -33,6 +35,8 @@ class SmartHome:
             self.appliance_to_phase = {app: PHASES[home_info['phase_number']-1] for app in self.appliances}
             self.selected_phase = PHASES[home_info['phase_number']-1]
         else:
+            # If the home is three-phased then any electric vehicle will be considered as three-phase as well,
+            # and the rest of the appliances will be allocated according to phase_allocation()
             if 'BEV' in self.appliances:
                 apps_copy = self.appliances.copy()
                 apps_copy.remove('BEV')
@@ -82,54 +86,77 @@ class SmartHome:
         self.simulation_appliance_to_phase = {}
 
     def set_single_day_aggregated_profile(self, profile_option, day):
-
+        """
+        Creates the load profile for a single day.
+        :param profile_option: int
+        :param day: str
+        :return:
+        """
+        # initialize active and reactive power dataframes with 0s
         p = pd.DataFrame(0, columns=list(PHASES.values()),
                          index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
 
         q = pd.DataFrame(0, columns=list(PHASES.values()),
                          index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
 
+        # Set number of appliances, type of appliances and phase allocation according to the profile_option
+        # as mentioned in the manual
         if profile_option == 0:
+            # For profile_option = 0, both number_of_appliances and type of appliances are random.
             number_of_appliances = np.random.randint(data_config.NUM_APPLIANCES)
             appliances = random.sample(data_config.APPLIANCES, number_of_appliances)
+            # phase allocation
             if not self.single_phase:
                 appliance_to_phase = phase_allocation(appliances)
             else:
                 appliance_to_phase = {app: self.selected_phase for app in appliances}
-            # and random profile
+
         elif profile_option == 1:
+            # For profile_option = 1, number_of_appliances is fixed (set at initialization)
+            # and type of appliances is random.
             appliances = random.sample(data_config.APPLIANCES, self.number_of_appliances)
+            # phase allocation
             if not self.single_phase:
                 appliance_to_phase = phase_allocation(appliances)
             else:
                 appliance_to_phase = {app: self.selected_phase for app in appliances}
-            # and random profile
+
         else:
+            # In any other case, both number_of_appliances and type of appliances are fixed and set at initialization.
             appliances = self.appliances
             appliance_to_phase = self.appliance_to_phase
-            # for 2 random profile, for 3 fixed
 
+        # The always on load is considered independently for each home.
         appliances += ['AlwaysOn']
+
         self.simulation_appliances = appliances
         self.simulation_appliance_to_phase = appliance_to_phase
 
+        # Add active and reactive power of each appliance
         for appliance in appliances:
+            # get available csv files for the profiles of each appliance
             path_to_profiles = os.path.join(data_config.PROFILES_PATH, appliance, day_type[day])
             available_profiles = os.listdir(path_to_profiles)
             available_profiles.sort(key=natural_keys)
 
+            # For profile option 0, 1 or 2, select a random profile
             if profile_option < 3:
                 selected_profile = np.random.choice(available_profiles)
                 selected_profile = os.path.join(path_to_profiles, selected_profile)
             else:
+                # For profile option 3, assert that the wanted profile exists
                 assert self.appliance_profile[appliance] < len(available_profiles), 'No profile {} for {}'.format(
                         self.appliance_profile[appliance], appliance)
 
                 selected_profile = os.path.join(path_to_profiles, available_profiles[self.appliance_profile[appliance]])
 
+            # read the time-series from the csv file
             appliance_power = pd.read_csv(selected_profile, index_col=0)
 
+            # Depending on the appliance type, add the appliance power to the total power.
             if appliance == 'AlwaysOn':
+                # in case of always_on, if the home is three-phase both active and reactive power are split
+                # between the phases
                 if self.single_phase:
                     p[self.selected_phase] += appliance_power.P.values
                     if 'Q' in appliance_power.columns:
@@ -141,16 +168,17 @@ class SmartHome:
                             q[phase] += appliance_power.Q.values/3
                 continue
 
-            elif appliance == 'BEV' and not self.single_phase:
+            # in case of electric vehicle, if the home is three-phase both active and reactive power are split
+            # between the phases
+            elif appliance in ['BEV'] and not self.single_phase:
                 for phase in PHASES.values():
                     p[phase] += appliance_power.P.values / 3
                     if 'Q' in appliance_power.columns:
                         q[phase] += appliance_power.Q.values / 3
-
                 continue
 
+            # for any other appliance, both active and reactive power are added to the corresponding phase
             p[appliance_to_phase[appliance]] += appliance_power.P.values
-
             if 'Q' in appliance_power.columns:
                 q[appliance_to_phase[appliance]] += appliance_power.Q.values
 
@@ -158,21 +186,31 @@ class SmartHome:
         self.Q = q
 
     def set_multiple_days_aggregated_profile(self, days):
+        """
+        Creates the load profile for multiple days.
+        :param days: [str]
+        :return:
+        """
+        # initialize active and reactive power dataframes with 0s
         p = pd.DataFrame(0, columns=list(PHASES.values()),
                          index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days)*60*60*24))
 
         q = pd.DataFrame(0, columns=list(PHASES.values()),
                          index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days)*60*60*24))
 
+        # In the case of multiple days, both the number and the type of appliances are fixed
+        # but the profiles are random.
         appliances = self.appliances + ['AlwaysOn']
         appliance_to_phase = self.appliance_to_phase
 
         self.simulation_appliances = appliances
         self.simulation_appliance_to_phase = appliance_to_phase
 
-        # random profiles
+        # Iterate for every day
         for k, day in enumerate(days):
+            # For each day, iterate through all available appliances
             for appliance in appliances:
+                # Get a random profile from the available
                 path_to_profiles = os.path.join(data_config.PROFILES_PATH, appliance, day_type[day])
                 available_profiles = os.listdir(path_to_profiles)
                 available_profiles.sort(key=natural_keys)
@@ -180,11 +218,15 @@ class SmartHome:
                 selected_profile = np.random.choice(available_profiles)
                 selected_profile = os.path.join(path_to_profiles, selected_profile)
 
+                # Get the appliance power as a dataframe from the csv file
                 appliance_power = pd.read_csv(selected_profile, index_col=0)
 
+                # Create the start and end index of each day
                 start_index = str(k) + ' days'
                 end_index = start_index + ' 23:59:59'
 
+                # In case of always_on, if the home is three-phase both active and reactive power are split
+                # between the phases
                 if appliance == 'AlwaysOn':
                     if self.single_phase:
                         p.loc[start_index:end_index, self.selected_phase] += \
@@ -199,14 +241,16 @@ class SmartHome:
                                 q.loc[start_index:end_index, phase] += appliance_power.Q.values/3
                     continue
 
+                # in case of electric vehicle, if the home is three-phase both active and reactive power are split
+                # between the phases
                 elif appliance == 'BEV' and not self.single_phase:
                     for phase in PHASES.values():
                         p.loc[start_index:end_index, phase] += appliance_power.P.values/3
                         if 'Q' in appliance_power.columns:
                             q.loc[start_index:end_index, phase] += appliance_power.Q.values/3
-
                     continue
 
+                # for any other appliance, both active and reactive power are added to the corresponding phase
                 p.loc[start_index:end_index, appliance_to_phase[appliance]] += appliance_power.P.values
                 if 'Q' in appliance_power.columns:
                     q.loc[start_index:end_index, appliance_to_phase[appliance]] += appliance_power.Q.values
@@ -215,6 +259,12 @@ class SmartHome:
         self.Q = q
 
     def set_pv(self, days, month):
+        """
+        Creates the production profile for the solar panels.
+        :param days: [str]
+        :param month: int
+        :return:
+        """
         if len(days) == 1:
             if self.has_pv:
                 self.PV = pd.Series(data=self.pv_rated*pv_profile_generator(month), name=days[0],
@@ -237,7 +287,15 @@ class SmartHome:
                 self.PV *= 1000
 
     def set_battery(self):
+        """
+        Creates the battery charging and discharging active power time-series.
+        Both self.P and self.PV have to be initialized before calling this method.
+        :return:
+        """
+        # get the total active power from all phases
         p = self.P.sum(axis=1)
+
+        # If the home has a battery, apply the battery function
         if self.has_battery:
 
             battery_df = battery_function(p=p/1000, pv=self.PV/1000,
@@ -255,6 +313,8 @@ class SmartHome:
             self.battery['p_ch_bat'] = 1000*battery_df['p_ch_bat']
             self.battery['p_dch_bat'] = 1000*battery_df['p_dch_bat']
             self.total_grid_power = 1000*battery_df['grid_power']
+
+        # If the home has no battery, battery charging and discharging power are considered 0.
         else:
             self.battery['soc'] = pd.Series(index=self.P.index, data=0)
             self.battery['p_ch_bat'] = pd.Series(index=self.P.index, data=0)
@@ -262,12 +322,26 @@ class SmartHome:
             self.total_grid_power = self.PV - p
 
     def set_pv_and_battery(self, days, month):
+        """
+        Method to set both PV and battery. It also calculates the grid power for each phase.
+        :param days: [str]
+        :param month: int
+        :return:
+        """
         self.set_pv(days, month)
         self.set_battery()
         self.calculate_grid_power()
 
     def reset_pv_and_battery_values(self, df):
+        """
+        Method that resets PV and battery properties. The time-series for PV production and
+        battery charging/discharging are set to None.
+        A new dataframe is needed including the properties of the new PV and battery.
+        :param df: pd.DataFrame
+        :return:
+        """
 
+        # Read the new battery properties
         self.battery = {
             key.lower(): None if np.isnan(df[key]) else df[key] for key in
                 ['SoC_init', 'P_max_bat', 'E_max', 'SoC_min', 'SoC_max', 'ch_eff', 'dch_eff', 't_lpf_bat']
@@ -294,19 +368,28 @@ class SmartHome:
         self.total_grid_power = pd.Series()
 
     def calculate_grid_power(self):
+        """
+        Calculates the grid power for each phase.
+        :return:
+        """
         temp_pv = pd.DataFrame(index=self.P.index, columns=self.P.columns, data=0)
         temp_bat_ch = pd.DataFrame(index=self.P.index, columns=self.P.columns, data=0)
         temp_bat_dch = pd.DataFrame(index=self.P.index, columns=self.P.columns, data=0)
+        # In case of single phase home both PV and battery operate in the selected phase.
         if self.single_phase:
             temp_pv[self.selected_phase] = self.PV.values
             temp_bat_ch[self.selected_phase] = self.battery['p_ch_bat'].values
             temp_bat_dch[self.selected_phase] = self.battery['p_dch_bat'].values
         else:
+            # In case of three-phase homes, both PV production and battery charging/discharging
+            # are split between the phases.
             for phase in temp_pv.columns:
                 temp_pv[phase] = self.PV.values/3
                 temp_bat_ch[phase] = self.battery['p_ch_bat'].values/3
                 temp_bat_dch[phase] = self.battery['p_dch_bat'].values/3
 
+        # the grid power for each phase is calculated as all the produced power (PV + discharging) minus
+        # the consumed power (loads + charging)
         self.grid_power = temp_pv - self.P - temp_bat_ch + temp_bat_dch
 
     def mean_auto_consumption_rate(self, battery=True):
