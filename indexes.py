@@ -254,11 +254,3 @@ def feeder_loss_to_load_ratio(total_load, losses):
     """
     return losses / (abs(total_load))
 
-#
-# def average_feeder_loading_index(line_power, line_length, line_c, total_length):
-#     afli = pd.DataFrame(index=line_power.index, columns=line_power.columns, data=0)
-#
-#     for k, line in enumerate(afli.columns):
-#         afli[line] = line_length[line]*line_power[line]/(total_length*line_c[line])
-#
-#     return afli.sum(axis=1)
