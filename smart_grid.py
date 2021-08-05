@@ -8,13 +8,28 @@ import os
 from smart_home import SmartHome
 from utils import check_for_consecutive_days, pv_profile_generator, PHASES
 from power_flow import solve_power_flow
-from indexes import average_feeder_loading_index, substation_reserve_capacity, feeder_loss_to_load_ratio
+from indexes import substation_reserve_capacity, feeder_loss_to_load_ratio
 
 
 class SmartGrid:
+    """
+    Class representing a grid of smart homes and solar panels.
+    """
 
-    def __init__(self, csv_file, name=None):
-        df = pd.read_csv(csv_file, index_col=0)
+    def __init__(self, grid_df=None, csv_file=None, name=None):
+        """
+        Initialization of the smart grid based on a csv file as explained in the manual.
+        We can either pass the path to the csv file at parameter csv_file OR
+        the pandas dataframe at parameter grid_df.
+        :param grid_df: pd.DataFrame
+        :param csv_file: str
+        :param name: str
+        """
+        # Get the df either from csv_file or from grid_df
+        if isinstance(csv_file, str):
+            df = pd.read_csv(csv_file, index_col=0)
+        elif isinstance(grid_df, pd.DataFrame):
+            df = grid_df
 
         if name:
             self.name = name
@@ -22,11 +37,13 @@ class SmartGrid:
             self.name = 'Smart grid 1'
 
         homes = df.columns
+        # map homes with integer numbers
         self.int_to_home = {k: home for k, home in enumerate(homes)}
 
         self.homes = {}
         self.generators = {}
 
+        # Represent each home as a SmartHome object.
         for home in homes:
             self.homes[home] = SmartHome(home, df[home])
 
@@ -45,18 +62,30 @@ class SmartGrid:
         self.path_to_results = None
 
     def __getitem__(self, home):
+        """
+        For parsing the grid as a list or dictionary.
+        :param home: str | int
+        :return:
+        """
         if isinstance(home, str):
             return self.homes[home]
-        else:
+        elif isinstance(home, int):
             return self.homes[self.int_to_home[home]]
 
     def set_simulation_parameters(self, simulation_file):
+        """
+        Reads the simulation parameters from a csv file.
+        :param simulation_file: str
+        :return:
+        """
         sim_param = pd.read_csv(simulation_file, index_col=0, header=None, squeeze=True).to_dict()
         self.profile_option = sim_param['profile_option']
         self.month = sim_param['month']
 
         assert self.month in range(1, 13)
 
+        # Check that the days in the simulation_file are consecutive.
+        # For example, we can not simulate Monday and Wednesday without Tuesday.
         consecutive, days = check_for_consecutive_days(sim_param)
         if not consecutive:
             warnings.warn('Warning. The input should be consecutive days.')
@@ -64,18 +93,26 @@ class SmartGrid:
         self.days = days
 
     def set_load_consumption(self):
+        """
+        This method creates the load profile for each home.
+        :return:
+        """
 
         assert self.month, 'No month is selected'
         assert len(self.days), 'Number of days is 0'
 
+        # Iterate through all homes
         for k, home in enumerate(self.homes.values()):
+            # Call the correct method based on the number of days.
             if len(self.days) == 1:
                 home.set_single_day_aggregated_profile(self.profile_option, self.days[0])
             else:
                 home.set_multiple_days_aggregated_profile(self.days)
 
+            # Set PV and battery power.
             home.set_pv_and_battery(self.days, self.month)
 
+        # Sum aggregated P, P_load and Q (per phase) for all homes.
         self.P = self[0].grid_power.copy()
         self.P_load = self[0].P.copy()
         self.Q = self[0].Q.copy()
@@ -85,6 +122,14 @@ class SmartGrid:
             self.Q += self[i].Q
 
     def reset_pv_and_battery(self, pv_and_battery_df):
+        """
+        Method that resets PV and battery properties for all homes.
+        The time-series for PV production and battery charging/discharging are also reset.
+        A new dataframe is needed including the properties of the new PV and batteries.
+        :param pv_and_battery_df: pd.DataFrame
+        :return:
+        """
+
         homes = pv_and_battery_df.columns
 
         for home in homes:
@@ -95,21 +140,28 @@ class SmartGrid:
             self.homes[home].reset_pv_and_battery_values(pv_and_battery_df[home])
             self.homes[home].set_pv_and_battery(self.days, self.month)
 
+        # Sum aggregated P (per phase) for all homes. P_load and Q remain the same since the new PV and
+        # batteries do not affect the load or the reactive power.
         self.P = self[0].grid_power.copy()
-        # self.P_load = self[0].P.copy()
-        # self.Q = self[0].Q.copy()
+
         for i in range(1, len(self.homes)):
             self.P += self[i].grid_power
-            # self.P_load += self[i].P
-            # self.Q += self[i].Q
 
-    def set_generators(self, csv_file):
+    def set_generators(self, pv_df=None, csv_file=None):
+        """
+        Method for setting solar panels at free nodes of the grid.
+        We can either pass the path to the csv file at parameter csv_file OR
+        the pandas dataframe at parameter pv_df.
+        :param pv_df: pd.DataFrame | None
+        :param csv_file: str | None
+        :return:
+        """
         self.generators = {}
 
         if isinstance(csv_file, str):
             df = pd.read_csv(csv_file, index_col=0)
-        else:
-            df = csv_file
+        elif isinstance(pv_df, pd.DataFrame):
+            df = pv_df
 
         for pv in df.columns:
             self.generators[pv] = PV(pv, df[pv])
@@ -119,6 +171,16 @@ class SmartGrid:
             self.P += generator.P
 
     def solve_power_flow(self, dss_path, number_of_seconds=None, starting_second=0, save_results=True, folder=None):
+        """
+        Method for solving power flow for the grid.
+        :param dss_path: str, Path to a .dss file. The name of each home should be the name
+                              of the bus that is connected to.
+        :param number_of_seconds: int, Number of seconds to solve the power flow
+        :param starting_second: int, The first second for which the power flow will be solved.
+        :param save_results: bool, Set to True to save results.
+        :param folder: str, Path of the folder where the results will be saved if save_results is True.
+        :return:
+        """
 
         path_to_grid_params, path_to_results = solve_power_flow(self, dss_path=dss_path,
                                                                 number_of_seconds=number_of_seconds,
@@ -129,11 +191,19 @@ class SmartGrid:
         self.path_to_results = path_to_results
 
     def get_statistics(self):
+        """
+        Method that returns
+            - the number of homes with battery and PV
+            - number of three-phase homes and single-phase homes connected to each phase
+            - number of homes that includes each appliance
+        :return: dict, dict
+        """
         pv = 0
         battery = 0
         appliances = {}
         three_phase = 0
         single_phase = {PHASES[0]: 0, PHASES[1]: 0, PHASES[2]: 0}
+
         for home in self.homes.values():
             if home.single_phase:
                 single_phase[home.selected_phase] += 1
@@ -183,6 +253,17 @@ class SmartGrid:
         return homes_with_battery
 
     def calculate_grid_indexes(self, path_to_grid_params=None, path_to_results=None):
+        """
+        Calculates some grid-related indexes for PV-BESS assessment.
+        For the calculation of these indexes, power flow should be solved and the results should be stored.
+        The input parameters are the path of the result folder and the path of the json file
+        created by the solve_power_flow method. If solve_power_flow() is called in the same session, there is no
+        need to set the input parameters.
+
+        :param path_to_grid_params: str | None
+        :param path_to_results: str | None
+        :return:
+        """
 
         if path_to_results is None:
             path_to_results = self.path_to_results
@@ -202,31 +283,28 @@ class SmartGrid:
         with open(path_to_grid_params, 'r') as fp:
             params = json.load(fp)
 
+        # get grid parameters
         S_substation = params['S_substation']
         initial_bus = params['initial_bus']
-        line_length = params['line_length']
-        total_length = params['total_length']
-        line_c = params['line_c']
         bus_names = params['bus_names']
         bus_connections = params['bus_connections']
 
         load_names = list(self.homes.keys())
 
+        # calculate power balance index
         self.indexes['pbi'] = self.power_balance_index(bus_names, load_names, bus_connections, initial_bus)
 
+        # calculate feeder loss to load ratio
         total_load = self.P_load.sum(axis=1)
-
         losses = pd.read_csv(os.path.join(path_to_results, 'Losses.csv'), index_col=0)
         total_load = total_load.iloc[:len(losses)]
         self.indexes['fllr'] = feeder_loss_to_load_ratio(total_load, losses.P)
 
+        # calculate substation reserve capacity
         transformer_power = pd.read_csv(os.path.join(path_to_results, 'transformer_power.csv'), index_col=0)
-        s = transformer_power['P_s'] + transformer_power['Q_s']
-        # s = (transformer_power['P_s']**2 + transformer_power['Q_s']**2)**(1/2)
+        # s = transformer_power['P_s'] + transformer_power['Q_s']
+        s = (transformer_power['P_s']**2 + transformer_power['Q_s']**2)**(1/2)
         self.indexes['src'] = substation_reserve_capacity(s, S_substation)
-
-        line_power = pd.read_csv(os.path.join(path_to_results, 'line_power.csv'), index_col=0)
-        self.indexes['afli'] = average_feeder_loading_index(line_power, line_length, line_c, total_length)
 
     def power_balance_index(self, bus_names, load_names, bus_connections, initial_bus):
         """
@@ -235,11 +313,11 @@ class SmartGrid:
         Rise and Reverse Power Flow Phenomena in a Distribution Feeder Under High PV Penetration," in IEEE Journal of
         Photovoltaics, vol. 5, no. 4, pp. 1158-1168, July 2015'
 
-        :param bus_names:
-        :param load_names:
-        :param bus_connections:
-        :param initial_bus:
-        :return:
+        :param bus_names: [str]
+        :param load_names: [str]
+        :param bus_connections: dict {str: [str]}
+        :param initial_bus: str
+        :return: dict {str: float}
         """
         recursive_power_balance_index = {bus: None for bus in bus_names}
 
@@ -248,6 +326,12 @@ class SmartGrid:
                 recursive_power_balance_index[bus] = self.homes[bus].total_grid_power
 
         def compute_pbi(bus, connections):
+            """
+            Recursive function for pbi computation.
+            :param bus: str
+            :param connections: [str]
+            :return: float
+            """
             pbi = 0
 
             for connection in connections:
@@ -269,11 +353,22 @@ class SmartGrid:
         return recursive_power_balance_index
 
     def get_power(self):
+        """
+        Returns total active power and reactive power.
+        :return: pd.Series, pd.Series
+        """
         p = self.P.sum(axis=1)
         q = self.Q.sum(axis=1)
         return p, q
 
     def plot_active_power(self, phase=None):
+        """
+        Plots the active power.
+        If 'phase' is None, the total active power is plotted.
+        If 'phase' is 'a', 'b' or 'c' the corresponding phase is plotted.
+        :param phase: None | 'a' | 'b' | 'c'
+        :return:
+        """
         plt.figure()
         if phase:
             self.P[phase].plot()
@@ -285,6 +380,13 @@ class SmartGrid:
         plt.show()
 
     def plot_reactive_power(self, phase=None):
+        """
+        Plots the reactive power.
+        If 'phase' is None, the total reactive power is plotted.
+        If 'phase' is 'a', 'b' or 'c' the corresponding phase is plotted.
+        :param phase: None | 'a' | 'b' | 'c'
+        :return:
+        """
         plt.figure()
         if phase:
             self.Q[phase].plot()
@@ -296,6 +398,13 @@ class SmartGrid:
         plt.show()
 
     def plot_power(self, phase=None):
+        """
+        Plots both the active and the reactive power.
+        If 'phase' is None, the total power is plotted.
+        If 'phase' is 'a', 'b' or 'c' the corresponding phase is plotted.
+        :param phase: None | 'a' | 'b' | 'c'
+        :return:
+        """
         plt.figure()
         if phase:
             self.P[phase].plot()
@@ -312,8 +421,18 @@ class SmartGrid:
 
 
 class PV:
+    """
+    Class representing solar panel at free node of the grid.
+    """
 
     def __init__(self, bus, pv_info):
+        """
+        Initialization of the PV based on a dataframe as explained in the manual.
+        These type of PV are always three-phase but in this project we can create single-phase as well.
+
+        :param bus: str, Name of the bus that the panel is connected to.
+        :param pv_info: pd.DataFrame
+        """
         self.bus = bus
         self.pv_rated = pv_info['rated']
         self.P = None
@@ -326,9 +445,17 @@ class PV:
             self.selected_phase = None
 
     def set_power(self, days, month):
+        """
+        This method creates the solar production based on the month.
+        :param days: [str]
+        :param month: int
+        :return:
+        """
+        # initialize the total production series with 0s
         self.P = pd.Series(0, name=days[0] + '-' + days[-1],
                            index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days) * 60 * 60 * 24))
 
+        # Calculate production for each day
         for k, day in enumerate(days):
             start_index = str(k) + ' days'
             end_index = start_index + ' 23:59:59'
@@ -336,12 +463,16 @@ class PV:
 
         self.P *= 1000
 
+        # initialize the production dataframe (per phase) with 0s
         three_phase_p = pd.DataFrame(0, columns=['a', 'b', 'c'],
                                      index=pd.timedelta_range(start='00:00:00', freq='1s',
                                                               periods=len(days) * 60 * 60 * 24))
 
+        # if the panel is single-phase assign the total production to the correct phase
         if self.single_phase:
             three_phase_p[self.selected_phase] = self.P.values
+
+        # if the panel is three-phase split between the phases
         else:
             for phase in three_phase_p.columns:
                 three_phase_p[phase] = self.P.values/3
