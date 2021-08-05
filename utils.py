@@ -34,6 +34,11 @@ def natural_keys(text):
 
 
 def phase_allocation(appliances):
+    """
+    Function for phase allocation as presented in the manual.
+    :param appliances: [str]
+    :return: dict {str: str} mapping an appliance to its phase
+    """
     appliance_power = [RATED_POWER[appliance] for appliance in appliances]
     # sort
     sort_index = np.argsort(appliance_power)[::-1]
@@ -49,6 +54,11 @@ def phase_allocation(appliances):
 
 
 def pv_profile_generator(month):
+    """
+    Returns the normalized power produced by a solar panel in a specific month.
+    :param month: int
+    :return: np.array
+    """
     file = os.path.join(PROFILES_PATH, 'PV', 'monthly_profiles.csv')
     df = pd.read_csv(file, index_col=0)
     profile = df[df.columns[month]]
@@ -56,6 +66,13 @@ def pv_profile_generator(month):
 
 
 def check_for_consecutive_days(params):
+    """
+    Given a dictionary with the simulation parameters, this function checks if the days for simulation are
+    consecutive or not. Furthermore, the days are considered Monday to Sunday, meaning that in case the input days
+    are Monday, Tuesday, Sunday the simulation will be applied from Sunday to Tuesday in order to have consecutive days.
+    :param params: dict
+    :return: bool, [str]
+    """
     binary = [params[day] for day in DAYS]
 
     if sum(binary) == 7:
@@ -83,8 +100,21 @@ def check_for_consecutive_days(params):
     return True, days
 
 
-# Code for implementation of battery storage system
 def battery_function(p, pv, soc_init, soc_min, soc_max, e_max, ch_eff, dch_eff, p_max_bat, t_lpf_bat):
+    """
+    Function for implementation of battery storage system as described in the manual.
+    :param p: pd.Series
+    :param pv: pd.Series
+    :param soc_init: float
+    :param soc_min: float
+    :param soc_max: float
+    :param e_max: float
+    :param ch_eff: float
+    :param dch_eff: float
+    :param p_max_bat: float
+    :param t_lpf_bat: int
+    :return: pd.DataFrame
+    """
 
     time_steps = len(p)
     SoC = np.zeros(time_steps + 1)
@@ -161,45 +191,5 @@ def battery_function(p, pv, soc_init, soc_min, soc_max, e_max, ch_eff, dch_eff, 
     df.p_ch_bat = Pch_bat
     df.p_dch_bat = Pdch_bat
     df.grid_power = Grid_power
+
     return df
-
-
-def houses_timeseries_to_mat(grid):
-    load_loc = []
-    phase_con = []
-    Pload = []
-    Qload = []
-    PQloadname = []
-
-    pv_power = pv_profile_generator(grid.month)
-
-    for home in grid.homes.keys():
-        h = grid.homes[home]
-        load_loc.append(int(home[1:]))
-        PQloadname.append(home)
-        if h.single_phase:
-            phase_con.append(h.selected_phase)
-            Pload.append(h.P[h.selected_phase].values)
-            Qload.append(h.Q[h.selected_phase].values)
-        else:
-            phase_con.append('abc')
-            for phase in h.P.columns:
-                Pload.append(h.P[phase].values)
-                Qload.append(h.Q[phase].values)
-
-    load_loc = np.array(load_loc).reshape(-1)
-    phase_con = np.array(phase_con)
-    Pload = np.array(Pload).T
-    Qload = np.array(Qload).T
-    PQloadname = np.array(PQloadname)
-
-    dict = {'Load_loc': load_loc,
-            'phase_con': phase_con,
-            'Pload': Pload,
-            'Qload': Qload,
-            'PQLoadname': PQloadname,
-            'pv': pv_power.T}
-
-    scipy.io.savemat('bottom_up_data.mat', dict)
-
-
