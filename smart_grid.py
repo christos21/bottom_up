@@ -165,6 +165,9 @@ class SmartGrid:
             df = pd.read_csv(csv_file, index_col=0)
         elif isinstance(pv_df, pd.DataFrame):
             df = pv_df
+        else:
+            warnings.warn('Wrong input.')
+            sys.exit()
 
         for pv in df.columns:
             self.generators[pv] = PV(pv, df[pv])
