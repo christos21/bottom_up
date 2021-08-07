@@ -30,6 +30,9 @@ class SmartGrid:
             df = pd.read_csv(csv_file, index_col=0)
         elif isinstance(grid_df, pd.DataFrame):
             df = grid_df
+        else:
+            warnings.warn('Wrong input for SmartGrid initialization.')
+            sys.exit()
 
         if name:
             self.name = name
