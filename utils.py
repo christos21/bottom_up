@@ -193,3 +193,34 @@ def battery_function(p, pv, soc_init, soc_min, soc_max, e_max, ch_eff, dch_eff, 
     df.grid_power = Grid_power
 
     return df
+
+
+def check_current_limits(lines_current, line_limits):
+    """
+    Checks for thermal problems in lines.
+    The inputs are a dataframe with current for each line and a dictionary with current limit for each line.
+    If there is at least a single line with current exceeding the corresponding limit, the function returns 'False',
+    else returns 'True'.
+
+    Columns -> lines
+    Rows -> time instants
+
+    :param lines_current: pd.DataFrame
+    :param line_limits: dict
+    :return: bool
+    """
+    # get all line names
+    lines = lines_current.columns
+
+    for line in lines:
+        i_line = lines_current[line]
+        if line in line_limits.keys():
+            limit = line_limits[line]
+        else:
+            limit = line_limits[line.upper()]
+
+        if (i_line > limit).any():
+            return False
+
+    return True
+
