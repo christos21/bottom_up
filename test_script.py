@@ -17,3 +17,5 @@ grid.set_generators(csv_file='test_cases/test_case_1_minor_over_voltage/generato
 grid.solve_power_flow(dss_path='test_cases/test_case_1_minor_over_voltage/IEEE.dss', number_of_seconds=30,
                       starting_second=1000, save_results=True, folder='demo')
 
+# calculate grid indexes
+grid.calculate_grid_indexes()
