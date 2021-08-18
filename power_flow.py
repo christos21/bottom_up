@@ -303,6 +303,8 @@ def solve_power_flow(grid, dss_path='test_grids/JRC.dss', number_of_seconds=None
             user_input = input('Results already exist. Do you want to rewrite? [Y/N] \n')
             if user_input.lower() == 'y':
                 write_flag = True
+            else:
+                return "", ""
         else:
             os.makedirs(folder)
             write_flag = True
@@ -380,10 +382,10 @@ def solve_power_flow(grid, dss_path='test_grids/JRC.dss', number_of_seconds=None
                           'bus_names': bus_names,
                           'bus_connections': bus_connections}
 
-            with open('parameters.json', 'w') as fp:
+            with open(os.path.join(folder, 'parameters.json'), 'w') as fp:
                 json.dump(param_dict, fp, sort_keys=True, indent=4)
 
-            return os.path.join(os.getcwd(), 'parameters.json'), folder
+            return os.path.join(folder, 'parameters.json'), folder
 
     else:
 

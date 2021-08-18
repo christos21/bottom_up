@@ -188,11 +188,15 @@ class SmartGrid:
         :return:
         """
 
-        path_to_grid_params, path_to_results = solve_power_flow(self, dss_path=dss_path,
-                                                                number_of_seconds=number_of_seconds,
-                                                                starting_second=starting_second,
-                                                                save_results=save_results,
-                                                                folder=folder)
+        if save_results:
+            path_to_grid_params, path_to_results = solve_power_flow(self, dss_path=dss_path,
+                                                                    number_of_seconds=number_of_seconds,
+                                                                    starting_second=starting_second,
+                                                                    save_results=save_results,
+                                                                    folder=folder)
+        else:
+            path_to_grid_params, path_to_results = None, None
+
         self.path_to_grid_params = path_to_grid_params
         self.path_to_results = path_to_results
 
