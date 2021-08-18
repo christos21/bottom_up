@@ -18,4 +18,5 @@ grid.solve_power_flow(dss_path='test_cases/test_case_1_minor_over_voltage/IEEE.d
                       starting_second=1000, save_results=True, folder='demo')
 
 # calculate grid indexes
-grid.calculate_grid_indexes()
+if grid.path_to_results and grid.path_to_grid_params:
+    grid.calculate_grid_indexes()
