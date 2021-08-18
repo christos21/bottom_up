@@ -1,4 +1,8 @@
 over_voltage_scenarios
+local_test_cases
+test_grids
+documentation/Bottom_up_software_guide.docx
+dataset/profiles
 
 *.graphml
 *.png
