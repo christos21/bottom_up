@@ -1,4 +1,4 @@
-# BUMP: Smart Grid Bottom-up Modelling and Power-flowAnalysis
+# BUMP: Smart Grid Bottom-up Modelling and Power-flow Analysis
 
 This project is a bottom-up modelling approach of a smart grid. A smart grid, 
 consisting of multiple households, is simulated and a power flow analysis 
