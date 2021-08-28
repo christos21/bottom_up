@@ -257,9 +257,9 @@ def main():
 
         # Check the necessary conditions
         if OVER_VOLTAGE_AND_THERMAL_LIMITS:
-            pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum() and thermal_limits
-        elif OVER_VOLTAGE_AND_NOT_THERMAL_LIMITS:
             pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum() and not thermal_limits
+        elif OVER_VOLTAGE_AND_NOT_THERMAL_LIMITS:
+            pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum() and thermal_limits
         else:
             pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum()
 
