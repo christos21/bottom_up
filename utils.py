@@ -224,3 +224,78 @@ def check_current_limits(lines_current, line_limits):
 
     return True
 
+
+
+def sequential_voltage_vectors(va, vb, vc):
+    """
+    Calculates positive, zero and negative sequence voltages.
+    TODO: Remove constants and add as parameters
+
+    Voltages are considered as dataframes with each column corresponding to a bus and each row to a time instant.
+
+    :param va: pd.DataFrame
+    :param vb: pd.DataFrame
+    :param vc: pd.DataFrame
+    :return: pd.DataFrame, pd.DataFrame, pd.DataFrame
+    """
+    va.iloc[:, 0] = va.iloc[:, 0] / (11 / 0.416)
+    va = va / (416 / np.sqrt(3))
+
+    vb.iloc[:, 0] = vb.iloc[:, 0] / (11 / 0.416)
+    vb = vb / (416 / np.sqrt(3))
+
+    vc.iloc[:, 0] = vc.iloc[:, 0] / (11 / 0.416)
+    vc = vc / (416 / np.sqrt(3))
+
+    # calculate sequential voltages vector
+    V0 = (va + vb + vc) / 3
+    V1 = (va + vb * np.exp(1j * 2 * np.pi / 3) + vc * np.exp(1j * 4 * np.pi / 3)) / 3
+    V2 = (va + vb * np.exp(1j * 4 * np.pi / 3) + vc * np.exp(1j * 2 * np.pi / 3)) / 3
+
+    return V0, V1, V2
+
+
+def houses_timeseries_to_mat(grid, path_to_save):
+    """
+    Stores the active and reactive power from each home as well as the PV normalized power in a .mat file.
+    :param grid:
+    :param path_to_save:
+    :return:
+    """
+    load_loc = []
+    phase_con = []
+    Pload = []
+    Qload = []
+    PQloadname = []
+
+    pv_power = pv_profile_generator(grid.month)
+
+    for home in grid.homes.keys():
+        h = grid.homes[home]
+        load_loc.append(int(home[1:]))
+        PQloadname.append(home)
+        if h.single_phase:
+            phase_con.append(h.selected_phase)
+            Pload.append(h.P[h.selected_phase].values)
+            Qload.append(h.Q[h.selected_phase].values)
+        else:
+            phase_con.append('abc')
+            for phase in h.P.columns:
+                Pload.append(h.P[phase].values)
+                Qload.append(h.Q[phase].values)
+
+    load_loc = np.array(load_loc).reshape(-1)
+    phase_con = np.array(phase_con)
+    Pload = np.array(Pload).T
+    Qload = np.array(Qload).T
+    PQloadname = np.array(PQloadname)
+
+    dict = {'Load_loc': load_loc,
+            'phase_con': phase_con,
+            'Pload': Pload,
+            'Qload': Qload,
+            'PQLoadname': PQloadname,
+            'pv': pv_power.T}
+
+    scipy.io.savemat(path_to_save, dict)  # 'bottom_up_data.mat'
+

@@ -20,7 +20,7 @@ If there is an over-voltage and/or thermal problem, the results are saved as csv
 import os.path
 from power_flow import solve_power_flow
 from smart_grid import SmartGrid
-from utils import pv_profile_generator, check_current_limits
+from utils import pv_profile_generator, check_current_limits, sequential_voltage_vectors
 import pandas as pd
 import numpy as np
 
@@ -97,34 +97,6 @@ term_nodes = ['b3', 'b14', 'b16', 'b25', 'b37', 'b38', 'b44', 'b68', 'b72', 'b74
 # DO NOT CHANGE THIS
 # Parameters needed for battery and PV
 ROWS = ['SoC_init', 'P_max_bat', 'E_max', 'SoC_min', 'SoC_max', 'PV_rated', 'ch_eff', 'dch_eff', 't_lpf_bat']
-
-
-def sequential_voltage_vectors(va, vb, vc):
-    """
-    Calculates positive, zero and negative sequence voltages.
-
-    Voltages are considered as dataframes with each column corresponding to a bus and each row to a time instant.
-
-    :param va: pd.DataFrame
-    :param vb: pd.DataFrame
-    :param vc: pd.DataFrame
-    :return: pd.DataFrame, pd.DataFrame, pd.DataFrame
-    """
-    va.iloc[:, 0] = va.iloc[:, 0] / (11 / 0.416)
-    va = va / (416 / np.sqrt(3))
-
-    vb.iloc[:, 0] = vb.iloc[:, 0] / (11 / 0.416)
-    vb = vb / (416 / np.sqrt(3))
-
-    vc.iloc[:, 0] = vc.iloc[:, 0] / (11 / 0.416)
-    vc = vc / (416 / np.sqrt(3))
-
-    # calculate sequential voltages vector
-    V0 = (va + vb + vc) / 3
-    V1 = (va + vb * np.exp(1j * 2 * np.pi / 3) + vc * np.exp(1j * 4 * np.pi / 3)) / 3
-    V2 = (va + vb * np.exp(1j * 4 * np.pi / 3) + vc * np.exp(1j * 2 * np.pi / 3)) / 3
-
-    return V0, V1, V2
 
 
 def main():
