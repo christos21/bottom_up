@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from utils import sequential_voltage_vectors
 
 """
 This file includes functions for calculating end-user and grid-related indexes.
@@ -125,7 +126,8 @@ def no_grid_interaction_probability(p_exchange, period='15min', limit=0.001):
     :param limit: float
     :return: float
     """
-    e_exchange = p_exchange.resample(period).sum()/(3600*1000)
+    current_freq = (p_exchange.index[1] - p_exchange.index[0]).seconds
+    e_exchange = p_exchange.resample(period).sum()/(3600*1000/current_freq)
     return 1*(abs(e_exchange) < abs(limit)).sum()/len(e_exchange)
 
 
@@ -219,15 +221,17 @@ def battery_utilization_index(charge, discharge, e_max, depth_of_discharge):
     :param depth_of_discharge: float
     :return: (float, float)
     """
-    numerator = charge.sum()
-    numerator = numerator/(1000*3600)
+    current_freq = (charge.index[1] - discharge.index[0]).seconds
 
-    denumerator = len(charge)/(24*3600)*e_max*depth_of_discharge
+    numerator = charge.sum()
+    numerator = numerator/(1000*3600/current_freq)
+
+    denumerator = len(charge)/(24*3600/current_freq)*e_max*depth_of_discharge
 
     bui_charge = numerator/denumerator
 
     numerator = discharge.sum()
-    numerator = numerator/(1000*3600)
+    numerator = numerator/(1000*3600/current_freq)
 
     bui_discharge = numerator/denumerator
 
@@ -253,4 +257,135 @@ def feeder_loss_to_load_ratio(total_load, losses):
     :return: pd.Series
     """
     return losses / (abs(total_load))
+
+
+def losses_to_load_ratio(total_load, active_losses):
+    """
+    Calculates losses to load ratio as described in [5].
+    :param total_load: pd.Series
+    :param active_losses: pd.Series
+    :return: pd.Series
+    """
+    return active_losses.sum() / total_load.sum()
+
+
+def losses_reduction_index(active_losses, passive_losses):
+    """
+    Calculates losses reduction index as described in [5].
+    :param active_losses: pd.Series
+    :param passive_losses: pd.Series
+    :return: pd.Series
+    """
+    return active_losses / passive_losses
+
+
+def voltage_unbalance_factors(va, vb, vc):
+    """
+    Calculates voltage unbalance factors as described in [5].
+    :param va: pd.DataFrame
+    :param vb: pd.DataFrame
+    :param vc: pd.DataFrame
+    :return: (pd.DataFrame, pd.DataFrame)
+    """
+    V0, V1, V2 = sequential_voltage_vectors(va, vb, vc)
+    V0, V1, V2 = abs(V0), abs(V1), abs(V2)
+    VUF0 = V0/V1 * 100
+    VUF2 = V2/V1 * 100
+
+    return VUF0, VUF2
+
+
+def mean_voltage_variance(v, freq=None):
+    """
+    Calculates mean voltage variance as described in [5].
+    :param v: pd.Dataframe
+    :return: pd.DataFrame
+    """
+    current_freq = (v.index[1] - v.index[0]).seconds
+
+    if freq is None:
+        freq = '{}s'.format(current_freq)
+
+    buses = v.columns
+
+    result = {}
+
+    for bus in buses:
+
+        v_values = v[bus].to_numpy.reshape([-1, (24*60*60)//current_freq]).T
+
+        _, days = v_values.shape
+
+        if days < 2:
+            continue
+
+        daily_v_df = pd.DataFrame(v_values, index=pd.timedelta_range(start='00:00:00', end='23:59:59',
+                                                                     freq='{}s'.format(current_freq)))
+
+        daily_v_df = daily_v_df.resample(freq).mean()
+
+        mean_v_per_time_step = daily_v_df.mean(axis=1)
+
+        sigma = ((v[bus] - mean_v_per_time_step)**2).sum(axis=1)/(days-1)
+
+        result[bus] = sigma
+
+    return pd.DataFrame(result, index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq=freq))
+
+
+def voltage_level_quantification_index(va, vb, vc, passive_va, passive_vb, passive_vc, r_to_bus):
+    """
+    Calculates voltage level quantification index as described in [5].
+    :param va: pd.Dataframe
+    :param vb: pd.Dataframe
+    :param vc: pd.Dataframe
+    :param passive_va: pd.Dataframe
+    :param passive_vb: pd.Dataframe
+    :param passive_vc: pd.Dataframe
+    :param r_to_bus: dict
+    :return: float
+    """
+    # Vnom is not required since it is the same and for VLQI it can be removed?
+    # Is R for each part R0?
+    # V1 is abs or vector?
+    w = r_to_bus
+
+    V0, V1, V2 = sequential_voltage_vectors(va, vb, vc)
+    V0, V1, V2 = abs(V0), abs(V1), abs(V2)
+
+    passive_V0, passive_V1, passive_V2 = sequential_voltage_vectors(passive_va, passive_vb, passive_vc)
+    passive_V0, passive_V1, passive_V2 = abs(passive_V0), abs(passive_V1), abs(passive_V2)
+
+    active = V1.copy()
+    passive = passive_V1.copy()
+
+    for col in active.columns:
+        if col not in w.keys():
+            continue
+        active[col] = active[col] * w[col]
+        passive[col] = passive[col] * w[col]
+
+    vlqi = active.sum(axis=1)/passive.sum(axis=1)
+    vlqi = vlqi.sum()/len(V0)
+
+    return vlqi
+
+
+def average_feeding_loading_index(length_to_bus, line_length, line_c, line_power):
+    """
+    Calculates average feeding loading index as described in [2].
+    :param length_to_bus: dict
+    :param line_length: dict
+    :param line_c: dict
+    :param line_power: pd.Dataframe
+    :return: pd.DataFrame
+    """
+    L = max(list(length_to_bus.values()))
+
+    afli = pd.DataFrame(index=line_power.index, columns=line_power.columns, data=0)
+
+    for k, line in enumerate(afli.columns):
+        afli[line] = line_length[line]*line_power[line]/(L*line_c[line])
+
+    return afli.sum(axis=1)
 
