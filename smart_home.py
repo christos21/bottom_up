@@ -258,16 +258,54 @@ class SmartHome:
         self.P = p
         self.Q = q
 
-    def set_pv(self, days, month):
+    def set_load_from_arrays(self, p_array, q_array, days, phase=None):
+        """
+        Creates the load profile from arrays.
+        :param p_array: np.array
+        :param q_array: np.array
+        :param days: [str]
+        :param phase: None | str
+        :return:
+        """
+
+        if phase:
+            # initialize active and reactive power dataframes with 0s
+            p = pd.DataFrame(0, columns=list(PHASES.values()),
+                             index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days) * 60 * 60 * 24))
+
+            q = pd.DataFrame(0, columns=list(PHASES.values()),
+                             index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days) * 60 * 60 * 24))
+
+            p[phase] = p_array
+            q[phase] = q_array
+        else:
+            # initialize active and reactive power dataframes with 0s
+            p = pd.DataFrame(p_array, columns=list(PHASES.values()),
+                             index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days) * 60 * 60 * 24))
+
+            q = pd.DataFrame(q_array, columns=list(PHASES.values()),
+                             index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days) * 60 * 60 * 24))
+
+        self.P = p.copy()
+        self.Q = q.copy()
+
+    def set_pv(self, days, month, from_array=False, pv_array=None):
         """
         Creates the production profile for the solar panels.
         :param days: [str]
         :param month: int
+        :param from_array: bool
+        :param pv_array: np.array
         :return:
         """
+        if from_array:
+            pv_values = pv_array
+        else:
+            pv_values = pv_profile_generator(month)
+
         if len(days) == 1:
             if self.has_pv:
-                self.PV = pd.Series(data=self.pv_rated*pv_profile_generator(month), name=days[0],
+                self.PV = pd.Series(data=self.pv_rated*pv_values, name=days[0],
                                     index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
                 self.PV *= 1000
             else:
@@ -282,7 +320,7 @@ class SmartHome:
                 for k, day in enumerate(days):
                     start_index = str(k) + ' days'
                     end_index = start_index + ' 23:59:59'
-                    self.PV[start_index:end_index] = self.pv_rated*pv_profile_generator(month)
+                    self.PV[start_index:end_index] = self.pv_rated*pv_values
 
                 self.PV *= 1000
 
@@ -321,14 +359,16 @@ class SmartHome:
             self.battery['p_dch_bat'] = pd.Series(index=self.P.index, data=0)
             self.total_grid_power = self.PV - p
 
-    def set_pv_and_battery(self, days, month):
+    def set_pv_and_battery(self, days, month, pv_from_array=False, pv_array=None):
         """
         Method to set both PV and battery. It also calculates the grid power for each phase.
         :param days: [str]
         :param month: int
+        :param pv_from_array: bool
+        :param pv_array: np.array
         :return:
         """
-        self.set_pv(days, month)
+        self.set_pv(days, month, pv_from_array, pv_array)
         self.set_battery()
         self.calculate_grid_power()
 
