@@ -256,7 +256,8 @@ def feeder_loss_to_load_ratio(total_load, losses):
     :param losses: pd.Series
     :return: pd.Series
     """
-    return losses / (abs(total_load))
+    fllr = losses.values / abs(total_load.values)
+    return pd.Series(data=fllr, index=total_load.index)
 
 
 def losses_to_load_ratio(total_load, active_losses):
@@ -301,7 +302,7 @@ def mean_voltage_variance(v, freq=None):
     :param v: pd.Dataframe
     :return: pd.DataFrame
     """
-    current_freq = (v.index[1] - v.index[0]).seconds
+    current_freq = (pd.Timedelta(v.index[1]) - pd.Timedelta(v.index[0])).seconds
 
     if freq is None:
         freq = '{}s'.format(current_freq)
@@ -312,7 +313,7 @@ def mean_voltage_variance(v, freq=None):
 
     for bus in buses:
 
-        v_values = v[bus].to_numpy.reshape([-1, (24*60*60)//current_freq]).T
+        v_values = v[bus].to_numpy().reshape([-1, (24*60*60)//current_freq]).T
 
         _, days = v_values.shape
 
@@ -326,7 +327,10 @@ def mean_voltage_variance(v, freq=None):
 
         mean_v_per_time_step = daily_v_df.mean(axis=1)
 
-        sigma = ((v[bus] - mean_v_per_time_step)**2).sum(axis=1)/(days-1)
+        sigma_df = pd.DataFrame(data=(daily_v_df.values - mean_v_per_time_step.values.reshape(-1, 1))**2,
+                                index=mean_v_per_time_step.index)
+
+        sigma = sigma_df.sum(axis=1)/(days-1)
 
         result[bus] = sigma
 
@@ -360,7 +364,7 @@ def voltage_level_quantification_index(va, vb, vc, passive_va, passive_vb, passi
     passive = passive_V1.copy()
 
     for col in active.columns:
-        if col not in w.keys():
+        if col not in w.keys() or not w[col]:
             continue
         active[col] = active[col] * w[col]
         passive[col] = passive[col] * w[col]
@@ -380,7 +384,12 @@ def average_feeding_loading_index(length_to_bus, line_length, line_c, line_power
     :param line_power: pd.Dataframe
     :return: pd.DataFrame
     """
-    L = max(list(length_to_bus.values()))
+    lengths = list(length_to_bus.values())
+    # to remove None
+    lengths = [l for l in lengths if l]
+    L = max(lengths)
+
+    line_c = dict((k.lower(), v) for k, v in line_c.items())
 
     afli = pd.DataFrame(index=line_power.index, columns=line_power.columns, data=0)
 
