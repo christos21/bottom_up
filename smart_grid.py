@@ -238,7 +238,7 @@ class SmartGrid:
         for generator in self.generators.values():
             self.P += generator.P
 
-    def solve_power_flow(self, dss_path, folder, number_of_seconds=None, starting_second=0, subsampling=1):
+    def solve_power_flow(self, dss_path, folder, number_of_seconds=None, starting_second=0, subsampling=1, home_power_factor=None):
         """
         Method for solving power flow for the grid.
         :param dss_path: str, Path to a .dss file. The name of each home should be the name
@@ -255,12 +255,13 @@ class SmartGrid:
                          starting_second=starting_second,
                          save_results=True,
                          folder=folder,
-                         subsampling=subsampling)
+                         subsampling=subsampling,
+                         home_power_factor=home_power_factor)
 
         self.path_to_results = folder
 
     def solve_passive_power_flow(self, dss_path, folder, number_of_seconds=None, starting_second=0,
-                                 subsampling=1):
+                                 subsampling=1, home_power_factor=None):
         """
         Method for solving power flow for the grid assuming no PV and batteries.
         :param dss_path: str, Path to a .dss file. The name of each home should be the name
@@ -276,7 +277,8 @@ class SmartGrid:
                                                          starting_second=starting_second,
                                                          save_results=True,
                                                          folder=folder,
-                                                         subsampling=subsampling)
+                                                         subsampling=subsampling,
+                                                         home_power_factor=home_power_factor)
 
     def get_statistics(self):
         """
@@ -374,6 +376,11 @@ class SmartGrid:
         Va = pd.read_csv(os.path.join(path_to_results, 'Va.csv'), index_col=0)
         Vb = pd.read_csv(os.path.join(path_to_results, 'Vb.csv'), index_col=0)
         Vc = pd.read_csv(os.path.join(path_to_results, 'Vc.csv'), index_col=0)
+
+        Va_vec = pd.read_csv(os.path.join(path_to_results, 'Va_vec.csv'), index_col=0).astype(complex)
+        Vb_vec = pd.read_csv(os.path.join(path_to_results, 'Vb_vec.csv'), index_col=0).astype(complex)
+        Vc_vec = pd.read_csv(os.path.join(path_to_results, 'Vc_vec.csv'), index_col=0).astype(complex)
+
         transformer_power = pd.read_csv(os.path.join(path_to_results, 'transformer_power.csv'), index_col=0)
 
         passive_losses = pd.read_csv(os.path.join(path_to_results, 'Losses_for_passive_network.csv'), index_col=0)
@@ -381,12 +388,16 @@ class SmartGrid:
         passive_vb = pd.read_csv(os.path.join(path_to_results, 'Vb_for_passive_network.csv'), index_col=0)
         passive_vc = pd.read_csv(os.path.join(path_to_results, 'Vc_for_passive_network.csv'), index_col=0)
 
+        passive_va_vec = pd.read_csv(os.path.join(path_to_results, 'Va_vec_for_passive_network.csv'), index_col=0).astype(complex)
+        passive_vb_vec = pd.read_csv(os.path.join(path_to_results, 'Vb_vec_for_passive_network.csv'), index_col=0).astype(complex)
+        passive_vc_vec = pd.read_csv(os.path.join(path_to_results, 'Vc_vec_for_passive_network.csv'), index_col=0).astype(complex)
+
         # calculate power balance index
         self.indexes['pbi'] = self.power_balance_index(bus_names, load_names, bus_connections, initial_bus)
 
         # calculate feeder loss to load ratio
         total_load = self.P_load.sum(axis=1)
-        total_load = total_load.loc[losses.index]  #total_load.iloc[:len(losses)]
+        total_load = total_load.loc[list(losses.index)]  #total_load.iloc[:len(losses)]
         self.indexes['fllr'] = feeder_loss_to_load_ratio(total_load, losses.P)
 
         # calculate substation reserve capacity
@@ -394,20 +405,20 @@ class SmartGrid:
         self.indexes['src'] = substation_reserve_capacity(s, S_substation)
 
         # calculate VUF0, VUF2
-        self.indexes['VUF0'], self.indexes['VUF2'] = voltage_unbalance_factors(Va, Vb, Vc)
+        self.indexes['VUF0'], self.indexes['VUF2'] = voltage_unbalance_factors(Va_vec, Vb_vec, Vc_vec)
 
         # calculate lri and llr
         self.indexes['llr'] = losses_to_load_ratio(total_load, losses.P)
         self.indexes['lri'] = losses_reduction_index(losses.P, passive_losses.P)
 
         # sigma
-        self.indexes['mean_voltage_variance_va'] = mean_voltage_variance(Va, '1s')
-        self.indexes['mean_voltage_variance_vb'] = mean_voltage_variance(Vb, '1s')
-        self.indexes['mean_voltage_variance_vc'] = mean_voltage_variance(Vc, '1s')
+        self.indexes['mean_voltage_variance_va'] = mean_voltage_variance(Va)
+        self.indexes['mean_voltage_variance_vb'] = mean_voltage_variance(Vb)
+        self.indexes['mean_voltage_variance_vc'] = mean_voltage_variance(Vc)
 
 
         # vlqi
-        self.indexes['vlqi'] = voltage_level_quantification_index(Va, Vb, Vc, passive_va, passive_vb, passive_vc, r_to_bus)
+        self.indexes['vlqi'] = voltage_level_quantification_index(Va_vec, Vb_vec, Vc_vec, passive_va_vec, passive_vb_vec, passive_vc_vec, r_to_bus)
 
         # afli
         line_limits = pd.read_csv(line_limits_file, index_col=0, header=None, squeeze=True).to_dict()
