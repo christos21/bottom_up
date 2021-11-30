@@ -299,3 +299,83 @@ def houses_timeseries_to_mat(grid, path_to_save):
 
     scipy.io.savemat(path_to_save, dict)  # 'bottom_up_data.mat'
 
+
+def calculate_power_factor(P, Q):
+    S = (P ** 2 + Q ** 2)**(1/2)
+    return P/S
+
+
+def mean_power_factor_per_second(grid, weighted_mean=False):
+
+    result = {}
+
+    for home_name in grid.homes.keys():
+
+        home = grid.homes[home_name]
+
+        p_values = home.P.sum(axis=1).to_numpy().reshape([-1, (24*60*60)]).T
+        q_values = home.Q.sum(axis=1).to_numpy().reshape([-1, (24 * 60 * 60)]).T
+
+        daily_pf_df = pd.DataFrame(calculate_power_factor(p_values, q_values),
+                                   index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
+
+        mean_household_pf_per_second = daily_pf_df.mean(axis=1)
+
+        result[home_name] = mean_household_pf_per_second
+
+    pf_for_all_houses = pd.DataFrame(result, index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
+
+    if not weighted_mean:
+        mean_pf_over_all_houses = pf_for_all_houses.mean(axis=1)
+    else:
+        p_cap_sum = 0
+        for home_name in grid.homes.keys():
+            pf_for_all_houses[home_name] *= grid.homes[home_name].p_cap
+            p_cap_sum += grid.homes[home_name].p_cap
+
+        mean_pf_over_all_houses = pf_for_all_houses.sum(axis=1)/p_cap_sum
+
+    return mean_pf_over_all_houses
+
+
+
+def mean_power_factor_for_week(grid, length_to_bus=None, weighted_mean=False, weighted_mean_with_length=False):
+
+    result = {}
+
+    for home_name in grid.homes.keys():
+
+        home = grid.homes[home_name]
+
+        p_values = home.P.sum(axis=1).to_numpy()
+        q_values = home.Q.sum(axis=1).to_numpy()
+
+        weekly_pf_df = pd.Series(calculate_power_factor(p_values, q_values),
+                                   index=home.P.index)
+
+        result[home_name] = weekly_pf_df
+
+    pf_for_all_houses = pd.DataFrame(result, index=result[list(result.keys())[0]].index)
+
+    if weighted_mean:
+        p_cap_sum = 0
+        for home_name in grid.homes.keys():
+            pf_for_all_houses[home_name] *= grid.homes[home_name].p_cap
+            p_cap_sum += grid.homes[home_name].p_cap
+
+        mean_pf_over_all_houses = pf_for_all_houses.sum(axis=1)/p_cap_sum
+
+    elif weighted_mean_with_length and length_to_bus:
+        length_sum = 0
+        for home_name in grid.homes.keys():
+            pf_for_all_houses[home_name] *= length_to_bus[home_name]
+            length_sum += length_to_bus[home_name]
+
+        mean_pf_over_all_houses = pf_for_all_houses.sum(axis=1) / length_sum
+    else:
+        mean_pf_over_all_houses = pf_for_all_houses.mean(axis=1)
+
+    return mean_pf_over_all_houses
+
+
+
