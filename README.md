@@ -1,13 +1,27 @@
-# BUMP: Smart Grid Bottom-up Modelling and Power-flow Analysis
+# BUMP: Smart Grid Bottom-up Modeling and Power-flow Analysis
 
-This project is a bottom-up modelling approach of a smart grid. A smart grid, 
-consisting of multiple households, is simulated and a power flow analysis 
-is applied for a period up to a week.  Furthermore, multiple end-user and grid 
-related indexes are calculated in order to evaluate the utilization of photovoltaic 
-(PV) and battery energy storage systems (BESS). 
-Finally, the PV and BESS penetration in a smart grid are tested for potential 
-over-voltage or thermal violation issues.
-You can find more information on user's manual in the folder "documentation".
+BUMP is a multi-purpose benchmarking testbed for low-voltage active distribution 
+networks (ADNs). The testbed comprises a granular residential appliance-level dataset, 
+a benchmarking framework based on quasi-static simulations, a set of technical 
+indices and a non-intrusive load monitoring (NILM) tool. 
+
+BUMP can model the load demand and generation profile of multiple LV prosumers 
+forming an ADN based on a bottom-up modeling approach. Additionally, by providing 
+the grid topology and line properties, quasi-static analysis is performed to assess 
+the grid operation and identify benchmarking test cases. The necessary input/output 
+communication is achieved via the filesystem. Furthermore, a pre-trained deep neural 
+network (DNN) is adapted to near real-time NILM for DR services. 
+An overview of BUMP and the core components is illustrated in the next figure.
+
+<img src="general schema.png" width="200"/>
+
+[comment]: <> (![]&#40;general schema.png&#41;)
+
+Finally, a suite of benchmark case studies (including overvoltage, undervoltage and 
+line congestion) is also included in this repository, supported by ancillary 
+trouble-shooting services, such as NILM and load shifting.
+
+
 
 
 
