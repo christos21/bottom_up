@@ -13,7 +13,7 @@ communication is achieved via the filesystem. Furthermore, a pre-trained deep ne
 network (DNN) is adapted to near real-time NILM for DR services. 
 An overview of BUMP and the core components is illustrated in the next figure.
 
-<img src="general schema.png" width="200"/>
+<img src="general schema.png" width="600"/>
 
 [comment]: <> (![]&#40;general schema.png&#41;)
 
