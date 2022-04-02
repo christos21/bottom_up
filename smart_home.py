@@ -65,6 +65,8 @@ class SmartHome:
         self.battery['p_dch_bat'] = None
 
         self.pv_rated = None if np.isnan(home_info['PV_rated']) else home_info['PV_rated']
+        self.pv_profile = 0 if ('PV_profile' not in home_info.index or np.isnan(home_info['PV_profile'])) \
+            else home_info['PV_profile']
 
         if self.pv_rated:
             self.has_pv = True
@@ -301,7 +303,7 @@ class SmartHome:
         if from_array:
             pv_values = pv_array
         else:
-            pv_values = pv_profile_generator(month)
+            pv_values = pv_profile_generator(month, profile=self.pv_profile)
 
         if len(days) == 1:
             if self.has_pv:

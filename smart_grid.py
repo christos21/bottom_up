@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import warnings
 import sys
 import matplotlib.pyplot as plt
@@ -557,6 +558,9 @@ class PV:
         self.P = None
         self.single_phase = True if pv_info['phase_number'] in [1, 2, 3] else False
 
+        self.pv_profile = 0 if ('PV_profile' not in pv_info.index or np.isnan(pv_info['PV_profile'])) \
+            else pv_info['PV_profile']
+
         if self.single_phase:
             assert pv_info['phase_number'] in [1, 2, 3]
             self.selected_phase = PHASES[pv_info['phase_number']-1]
@@ -575,7 +579,7 @@ class PV:
         if from_array:
             pv_values = pv_array
         else:
-            pv_values = pv_profile_generator(month)
+            pv_values = pv_profile_generator(month, profile=self.pv_profile)
 
         # initialize the total production series with 0s
         self.P = pd.Series(0, name=days[0] + '-' + days[-1],
