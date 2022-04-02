@@ -53,15 +53,27 @@ def phase_allocation(appliances):
     return appliance_to_phase
 
 
-def pv_profile_generator(month):
+# def pv_profile_generator(month):
+#     """
+#     Returns the normalized power produced by a solar panel in a specific month.
+#     :param month: int
+#     :return: np.array
+#     """
+#     file = os.path.join(PROFILES_PATH, 'PV', 'monthly_profiles.csv')
+#     df = pd.read_csv(file, index_col=0)
+#     profile = df[df.columns[month]]
+#     return profile.values
+
+
+def pv_profile_generator(month, profile=0):
     """
     Returns the normalized power produced by a solar panel in a specific month.
     :param month: int
     :return: np.array
     """
-    file = os.path.join(PROFILES_PATH, 'PV', 'monthly_profiles.csv')
+    file = os.path.join(PROFILES_PATH, 'PV', '{}.csv'.format(month+1))
     df = pd.read_csv(file, index_col=0)
-    profile = df[df.columns[month]]
+    profile = df[df.columns[profile]]
     return profile.values
 
 
@@ -376,6 +388,3 @@ def mean_power_factor_for_week(grid, length_to_bus=None, weighted_mean=False, we
         mean_pf_over_all_houses = pf_for_all_houses.mean(axis=1)
 
     return mean_pf_over_all_houses
-
-
-
