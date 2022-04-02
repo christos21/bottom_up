@@ -26,13 +26,13 @@ import numpy as np
 
 
 # specify grid, simulation and line limits csv paths as well as a dss file
-GRID_CSV = 'test_cases/test_case_1_minor_over_voltage/grid_IEEE.csv'
-SIMULATION_FILE = 'test_cases/test_case_1_minor_over_voltage/simulation_parameters.csv'
+GRID_CSV = 'test_cases/test_case_2_over_voltage/grid_IEEE.csv'
+SIMULATION_FILE = 'test_cases/test_case_2_over_voltage/simulation_parameters.csv'
 LINE_LIMITS_FILE = 'test_cases/line_limits.csv'
-DSS_FILE = 'test_cases/test_case_1_minor_over_voltage/IEEE.dss'
+DSS_FILE = 'test_cases/test_case_2_over_voltage/IEEE.dss'
 
 # Folder where the results will be saved
-FOLDER_TO_SAVE_RESULTS = 'over_voltage_07_08'
+FOLDER_TO_SAVE_RESULTS = 'over_voltage_9_Nov_1s'
 
 # Number of seconds to solve power flow
 POWER_FLOW_NUMBER_OF_SECONDS = 60
@@ -41,13 +41,13 @@ POWER_FLOW_STARTING_SECOND_OFFSET = 30
 # binary variable set to True if we want a scenario with over-voltage but no problem with line thermal limits
 OVER_VOLTAGE_AND_NOT_THERMAL_LIMITS = True
 # binary variable set to True if we want a scenario with both over-voltage and problem with line thermal limits
-OVER_VOLTAGE_AND_THERMAL_LIMITS = True
+OVER_VOLTAGE_AND_THERMAL_LIMITS = False
 
 # If none of the two binary variables is set to True, the algorithm will find a scenario with over-voltage regardless
 # if there is a thermal problem or not
 
 # pu limit for an over-voltage
-OVER_VOLTAGE_PU_LIMIT = 1.10
+OVER_VOLTAGE_PU_LIMIT = 1.103
 
 
 # The following parameters will be fixed for all random scenarios
@@ -80,19 +80,20 @@ PROBABILITY_OF_PV = 0.7
 PROBABILITY_OF_BATTERY_GIVEN_PV = 0.4
 
 # Number of PVs that will be installed at free nodes
-NUMBER_OF_PVS_AT_FREE_NODES = 5
+NUMBER_OF_PVS_AT_FREE_NODES = 8
 
 # Maximum number of scenarios to check
 MAXIMUM_SCENARIOS = 100
 
 # free terminal nodes, where PV can be installed
-term_nodes = ['b3', 'b14', 'b16', 'b25', 'b37', 'b38', 'b44', 'b68', 'b72', 'b74', 'b76', 'b78', 'b80', 'b82', 'b84',
-              'b87', 'b88', 'b91', 'b93', 'b96', 'b100', 'b102', 'b106', 'b109', 'b111', 'b115', 'b117', 'b121', 'b123',
-              'b126', 'b128', 'b129', 'b133', 'b139', 'b140', 'b142', 'b144', 'b145', 'b160', 'b176', 'b178', 'b180',
-              'b182', 'b184', 'b187', 'b189', 'b191', 'b195', 'b197', 'b201', 'b202', 'b203']
+# term_nodes = ['b3', 'b14', 'b16', 'b25', 'b37', 'b38', 'b44', 'b68', 'b72', 'b74', 'b76', 'b78', 'b80', 'b82', 'b84',
+#               'b87', 'b88', 'b91', 'b93', 'b96', 'b100', 'b102', 'b106', 'b109', 'b111', 'b115', 'b117', 'b121', 'b123',
+#               'b126', 'b128', 'b129', 'b133', 'b139', 'b140', 'b142', 'b144', 'b145', 'b160', 'b176', 'b178', 'b180',
+#               'b182', 'b184', 'b187', 'b189', 'b191', 'b195', 'b197', 'b201', 'b202', 'b203']
 
 # term_nodes = ['b202', 'b178', 'b144', 'b93', 'b37', 'b44', 'b160']
 
+term_nodes = ['b3', 'b16', 'b44', 'b38', 'b68', 'b72', 'b80', 'b100', 'b123', 'b145', 'b160', 'b180', 'b202']
 
 # DO NOT CHANGE THIS
 # Parameters needed for battery and PV
@@ -241,7 +242,7 @@ def main():
 
     # solve power flow again but now save results
     grid.solve_power_flow(dss_path=DSS_FILE, number_of_seconds=POWER_FLOW_NUMBER_OF_SECONDS,
-                          starting_second=t-POWER_FLOW_STARTING_SECOND_OFFSET, save_results=True,
+                          starting_second=t-POWER_FLOW_STARTING_SECOND_OFFSET,
                           folder=FOLDER_TO_SAVE_RESULTS)
 
     # Save csv files with information about PV, batteries and PV at free nodes
