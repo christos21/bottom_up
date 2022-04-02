@@ -317,15 +317,22 @@ def mean_voltage_variance(v, freq=None):
 
         _, days = v_values.shape
 
-        if days < 2:
-            continue
-
         daily_v_df = pd.DataFrame(v_values, index=pd.timedelta_range(start='00:00:00', end='23:59:59',
                                                                      freq='{}s'.format(current_freq)))
 
         daily_v_df = daily_v_df.resample(freq).mean()
 
-        mean_v_per_time_step = daily_v_df.mean(axis=1)
+        if days < 2:
+            days = 2
+            mean_v_per_time_step = pd.Series(index=daily_v_df.index, data=np.nan)
+            hourly_mean = daily_v_df.resample('1h').mean()
+            mean_v_per_time_step.loc[hourly_mean.index] = hourly_mean.values.reshape(-1)
+            mean_v_per_time_step = mean_v_per_time_step.ffill()
+
+            # mean_v_per_time_step = daily_v_df.resample('1h').mean().resample(freq).pad()
+        else:
+
+            mean_v_per_time_step = daily_v_df.mean(axis=1)
 
         sigma_df = pd.DataFrame(data=(daily_v_df.values - mean_v_per_time_step.values.reshape(-1, 1))**2,
                                 index=mean_v_per_time_step.index)
@@ -337,7 +344,7 @@ def mean_voltage_variance(v, freq=None):
     return pd.DataFrame(result, index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq=freq))
 
 
-def voltage_level_quantification_index(va, vb, vc, passive_va, passive_vb, passive_vc, r_to_bus):
+def voltage_level_quantification_index(va, vb, vc, passive_va, passive_vb, passive_vc, r_to_bus, active_nodes=None):
     """
     Calculates voltage level quantification index as described in [5].
     :param va: pd.Dataframe
@@ -360,8 +367,12 @@ def voltage_level_quantification_index(va, vb, vc, passive_va, passive_vb, passi
     passive_V0, passive_V1, passive_V2 = sequential_voltage_vectors(passive_va, passive_vb, passive_vc)
     passive_V0, passive_V1, passive_V2 = abs(passive_V0), abs(passive_V1), abs(passive_V2)
 
-    active = V1.copy()
-    passive = passive_V1.copy()
+    if active_nodes:
+        active = V1.loc[:, active_nodes].copy()
+        passive = passive_V1.loc[:, active_nodes].copy()
+    else:
+        active = V1.copy()
+        passive = passive_V1.copy()
 
     for col in active.columns:
         if col not in w.keys() or not w[col]:
