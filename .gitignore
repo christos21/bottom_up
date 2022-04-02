@@ -3,6 +3,7 @@ local_test_cases
 test_grids
 
 dataset/profiles
+test_cases
 journal_scripts
 under_*
 extract_more_monthly_pv_profiles.py
