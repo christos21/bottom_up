@@ -32,11 +32,14 @@ def from_csv_to_mat():
     # for each available appliance
     for appliance in appliance_folders:
 
-        if appliance in ['PV']:
-            appliance_profile_path = os.path.join(profiles_path, appliance, 'monthly_profiles.csv')
-            df = pd.read_csv(appliance_profile_path, index_col=0)
-            P = df.values
-            data_dict[appliance] = P
+        if appliance == 'PV':
+            pv_files = os.listdir(os.path.join(profiles_path, appliance))
+            for file in pv_files:
+                file_path = os.path.join(profiles_path, appliance, file)
+                df = pd.read_csv(file_path, index_col=0)
+                P = df.values
+                data_dict[appliance + '-' + file] = P
+
             continue
 
         for day_type in ['WD', 'NWD']:
@@ -91,18 +94,25 @@ def from_mat_to_csv(mat_file=os.path.join(CURRENT_PATH, 'profiles.mat')):
     keys = set(mat_file.keys()) - {'__header__', '__version__', '__globals__'}
 
     for key in keys:
-        if key == 'PV':
-            directory = os.path.join(profiles_csv_path, key)
+        if 'PV' in key:
+            app, file = key.split('-')
+
+            directory = os.path.join(profiles_csv_path, app)
             if os.path.exists(directory):
-                continue
+                pass
             else:
                 os.makedirs(directory)
 
             P = mat_file[key]
-            df = pd.DataFrame(data=P, columns=['January', 'February', 'March', 'April', 'May',
-                                               'June', 'July', 'August', 'September', 'October',
-                                               'November', 'December'])
-            df.to_csv(os.path.join(directory, 'monthly_profiles.csv'))
+
+            if file == 'monthly_profiles.csv':
+                df = pd.DataFrame(data=P, columns=['January', 'February', 'March', 'April', 'May',
+                                                   'June', 'July', 'August', 'September', 'October',
+                                                   'November', 'December'])
+            else:
+                df = pd.DataFrame(data=P)
+
+            df.to_csv(os.path.join(directory, file))
 
         else:
             appliance, power_type, day = key.split('_')
