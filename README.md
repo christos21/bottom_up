@@ -22,6 +22,11 @@ line congestion) is also included in this repository, supported by ancillary
 trouble-shooting services, such as NILM and load shifting.
 
 
+### Notes
+- Use the "bottom_up_packages.yml" file to create a virtual environment with all 
+necessary dependencies.
+- Install OpenDSS simulator.
+- Run the script "dataset/create_csv_profiles.py" to extract the dataset from the mat file. 
 
 
 
