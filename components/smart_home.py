@@ -8,9 +8,10 @@ import matplotlib.pyplot as plt
 
 import data_config
 import indexes
-from utils import day_type, natural_keys, phase_allocation, PHASES, pv_profile_generator, battery_function
+from utils import day_type, natural_keys, phase_allocation, PHASES
 
 from battery import Battery
+from solar import PV
 
 
 class SmartHome:
@@ -34,35 +35,19 @@ class SmartHome:
         self.appliance_profile['AlwaysOn'] = int(home_info['AlwaysOn_profile'])
 
         self.has_battery, self.battery = self.deduce_battery(home_info)
+        self.has_pv, self.pv = self.deduce_solar(home_info)
 
+        self.p_cap = home_info['p_cap']
 
+        self.P = pd.DataFrame()
+        self.Q = pd.DataFrame()
+        self.PV = pd.DataFrame()
+        self.grid_power = pd.DataFrame()
+        self.total_grid_power = pd.Series()
 
-
-        #
-        #
-        # self.pv_rated = None if np.isnan(home_info['PV_rated']) else home_info['PV_rated']
-        # self.pv_profile = 0 if ('PV_profile' not in home_info.index or np.isnan(home_info['PV_profile'])) \
-        #     else home_info['PV_profile']
-        #
-        # if self.pv_rated:
-        #     self.has_pv = True
-        # else:
-        #     self.has_pv = False
-        #
-        # self.p_cap = home_info['p_cap']
-        #
-        # self.P = None
-        # self.Q = None
-        # self.PV = None
-        #
-        # self.grid_power = pd.Series()
-        # self.total_grid_power = pd.Series()
-        #
-        # self.indexes = {}
-        #
-        # self.simulation_appliances = []
-        # self.simulation_appliance_to_phase = {}
-        #
+        self.indexes = {}
+        self.simulation_appliances = []
+        self.simulation_appliance_to_phase = {}
 
     def phase_allocation(
             self,
@@ -97,11 +82,7 @@ class SmartHome:
 
         return single_phase, selected_phase, appliance_to_phase
 
-
-    def deduce_battery(
-            self,
-            home_info: pd.DataFrame
-    ) -> Tuple[bool, Union[Battery, None]]:
+    def deduce_battery(self, home_info: pd.DataFrame) -> Tuple[bool, Union[Battery, None]]:
         """
         Deduce if there is battery for this house and creates the Battery object.
         :param home_info: pd.DataFrame
@@ -124,6 +105,30 @@ class SmartHome:
             battery = Battery(**battery_params)
 
         return has_battery, battery
+
+    def deduce_solar(self, home_info: pd.DataFrame) -> Tuple[bool, Union[PV, None]]:
+        """
+        Deduce if there is PV for this house and creates the PV object.
+        :param home_info: pd.DataFrame
+        :return: bool, PV|None
+        """
+        pv_rated = None if np.isnan(home_info['PV_rated']) else home_info['PV_rated']
+        pv_profile = 0 if (
+                            'PV_profile' not in home_info.index or
+                            np.isnan(home_info['PV_profile'])
+                          ) \
+                       else home_info['PV_profile']
+
+        if pv_rated:
+            has_pv = True
+            pv = PV(bus=self.name, pv_rated=pv_rated, single_phase=self.single_phase,
+                    selected_phase=self.selected_phase, profile=pv_profile)
+        else:
+            has_pv = False
+            pv = None
+
+        return has_pv, pv
+
 
 
 
@@ -345,31 +350,8 @@ class SmartHome:
         :param pv_array: np.array
         :return:
         """
-        if from_array:
-            pv_values = pv_array
-        else:
-            pv_values = pv_profile_generator(month, profile=self.pv_profile)
-
-        if len(days) == 1:
-            if self.has_pv:
-                self.PV = pd.Series(data=self.pv_rated*pv_values, name=days[0],
-                                    index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
-                self.PV *= 1000
-            else:
-                self.PV = pd.Series(data=0, name=days[0],
-                                    index=pd.timedelta_range(start='00:00:00', end='23:59:59', freq='1s'))
-
-        else:
-            self.PV = pd.Series(0, name=days[0] + '-' + days[-1],
-                                index=pd.timedelta_range(start='00:00:00', freq='1s', periods=len(days)*60*60*24))
-
-            if self.has_pv:
-                for k, day in enumerate(days):
-                    start_index = str(k) + ' days'
-                    end_index = start_index + ' 23:59:59'
-                    self.PV[start_index:end_index] = self.pv_rated*pv_values
-
-                self.PV *= 1000
+        self.pv.set_power(days, month, from_array, pv_array)
+        self.PV = self.pv.P.sum(axis=1)
 
     def set_battery(self):
         """
@@ -382,28 +364,9 @@ class SmartHome:
 
         # If the home has a battery, apply the battery function
         if self.has_battery:
+            self.total_grid_power = 1000 * self.battery(p/1000, self.PV/1000)
 
-            battery_df = battery_function(p=p/1000, pv=self.PV/1000,
-                                          soc_init=self.battery['soc_init'],
-                                          soc_min=self.battery['soc_min'],
-                                          soc_max=self.battery['soc_max'],
-                                          e_max=self.battery['e_max'],
-                                          ch_eff=self.battery['ch_eff'],
-                                          dch_eff=self.battery['dch_eff'],
-                                          p_max_bat=self.battery['p_max_bat'],
-                                          t_lpf_bat=self.battery['t_lpf_bat']
-                                          )
-
-            self.battery['soc'] = battery_df['soc']
-            self.battery['p_ch_bat'] = 1000*battery_df['p_ch_bat']
-            self.battery['p_dch_bat'] = 1000*battery_df['p_dch_bat']
-            self.total_grid_power = 1000*battery_df['grid_power']
-
-        # If the home has no battery, battery charging and discharging power are considered 0.
         else:
-            self.battery['soc'] = pd.Series(index=self.P.index, data=0)
-            self.battery['p_ch_bat'] = pd.Series(index=self.P.index, data=0)
-            self.battery['p_dch_bat'] = pd.Series(index=self.P.index, data=0)
             self.total_grid_power = self.PV - p
 
     def set_pv_and_battery(self, days, month, pv_from_array=False, pv_array=None):
@@ -419,6 +382,10 @@ class SmartHome:
         self.set_battery()
         self.calculate_grid_power()
 
+
+
+
+
     def reset_pv_and_battery_values(self, df):
         """
         Method that resets PV and battery properties. The time-series for PV production and
@@ -428,29 +395,10 @@ class SmartHome:
         :return:
         """
 
-        # Read the new battery properties
-        self.battery = {
-            key.lower(): None if np.isnan(df[key]) else df[key] for key in
-                ['SoC_init', 'P_max_bat', 'E_max', 'SoC_min', 'SoC_max', 'ch_eff', 'dch_eff', 't_lpf_bat']
-        }
+        self.has_battery, self.battery = self.deduce_battery(df)
+        self.has_pv, self.pv = self.deduce_solar(df)
 
-        if self.battery['p_max_bat']:
-            self.has_battery = True
-        else:
-            self.has_battery = False
-
-        self.battery['soc'] = None
-        self.battery['p_ch_bat'] = None
-        self.battery['p_dch_bat'] = None
-
-        self.pv_rated = None if np.isnan(df['PV_rated']) else df['PV_rated']
-
-        if self.pv_rated:
-            self.has_pv = True
-        else:
-            self.has_pv = False
-
-        self.PV = None
+        self.PV = pd.Series()
         self.grid_power = pd.Series()
         self.total_grid_power = pd.Series()
 
@@ -465,15 +413,15 @@ class SmartHome:
         # In case of single phase home both PV and battery operate in the selected phase.
         if self.single_phase:
             temp_pv[self.selected_phase] = self.PV.values
-            temp_bat_ch[self.selected_phase] = self.battery['p_ch_bat'].values
-            temp_bat_dch[self.selected_phase] = self.battery['p_dch_bat'].values
+            temp_bat_ch[self.selected_phase] = self.battery.charging_power.values
+            temp_bat_dch[self.selected_phase] = self.battery.discharging_power.values
         else:
             # In case of three-phase homes, both PV production and battery charging/discharging
             # are split between the phases.
             for phase in temp_pv.columns:
                 temp_pv[phase] = self.PV.values/3
-                temp_bat_ch[phase] = self.battery['p_ch_bat'].values/3
-                temp_bat_dch[phase] = self.battery['p_dch_bat'].values/3
+                temp_bat_ch[phase] = self.battery.charging_power.values/3
+                temp_bat_dch[phase] = self.battery.discharging_power.values/3
 
         # the grid power for each phase is calculated as all the produced power (PV + discharging) minus
         # the consumed power (loads + charging)
@@ -516,8 +464,8 @@ class SmartHome:
         :return: (float, float)
         """
         if battery and self.has_battery:
-            gamma_s, gamma_d = indexes.cover_factors(gen=self.PV + self.battery['p_dch_bat'],
-                                                     load=self.P.sum(axis=1) + self.battery['p_ch_bat'])
+            gamma_s, gamma_d = indexes.cover_factors(gen=self.PV + self.battery.discharging_power,
+                                                     load=self.P.sum(axis=1) + self.battery.charging_power)
         else:
             gamma_s, gamma_d = indexes.cover_factors(gen=self.PV, load=self.P.sum(axis=1))
 
@@ -533,8 +481,8 @@ class SmartHome:
         :return: pd.Series
         """
         if battery and self.has_battery:
-            lmi = indexes.load_match_index(gen=self.PV + self.battery['p_dch_bat'],
-                                           load=self.P.sum(axis=1) + self.battery['p_ch_bat'],
+            lmi = indexes.load_match_index(gen=self.PV + self.battery.discharging_power,
+                                           load=self.P.sum(axis=1) + self.battery.charging_power,
                                            interval=interval)
         else:
             lmi = indexes.load_match_index(gen=self.PV, load=self.P.sum(axis=1), interval=interval)
@@ -549,8 +497,8 @@ class SmartHome:
         :return: float
         """
         if battery and self.has_battery:
-            lolp = indexes.loss_of_load_probability(gen=self.PV + self.battery['p_dch_bat'],
-                                                    load=self.P.sum(axis=1) + self.battery['p_ch_bat'])
+            lolp = indexes.loss_of_load_probability(gen=self.PV + self.battery.discharging_power,
+                                                    load=self.P.sum(axis=1) + self.battery.charging_power)
         else:
             lolp = indexes.loss_of_load_probability(gen=self.PV, load=self.P.sum(axis=1))
 
@@ -625,8 +573,8 @@ class SmartHome:
         :return: float
         """
         if battery and self.has_battery:
-            scr = indexes.self_consumption_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery['p_ch_bat'],
-                                                battery_discharge=self.battery['p_dch_bat'])
+            scr = indexes.self_consumption_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery.charging_power,
+                                                battery_discharge=self.battery.discharging_power)
         else:
             scr = indexes.self_consumption_rate(self.P.sum(axis=1), self.PV)
 
@@ -640,8 +588,8 @@ class SmartHome:
         :return: float
         """
         if battery and self.has_battery:
-            ssr = indexes.self_sufficiency_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery['p_ch_bat'],
-                                                battery_discharge=self.battery['p_dch_bat'])
+            ssr = indexes.self_sufficiency_rate(self.P.sum(axis=1), self.PV, battery_charge=self.battery.charging_power,
+                                                battery_discharge=self.battery.discharging_power)
         else:
             ssr = indexes.self_sufficiency_rate(self.P.sum(axis=1), self.PV)
 
@@ -654,8 +602,8 @@ class SmartHome:
         :return: (float, float) | (None, None)
         """
         if self.has_battery:
-            bui = indexes.battery_utilization_index(self.battery['p_ch_bat'], self.battery['p_dch_bat'],
-                                                    self.battery['e_max'], depth_of_discharge=max(1-self.battery['soc']))
+            bui = indexes.battery_utilization_index(self.battery.charging_power, self.battery.discharging_power,
+                                                    self.battery.capacity, depth_of_discharge=max(1-self.battery.soc))
             bui_charge = bui[0]
             bui_discharge = bui[1]
         else:
@@ -721,7 +669,7 @@ class SmartHome:
         Returns total active power (including battery charging) and reactive power.
         :return: pd.Series, pd.Series
         """
-        p = self.P.sum(axis=1) + self.battery['p_ch_bat']
+        p = self.P.sum(axis=1) + self.battery.charging_power
         q = self.Q.sum(axis=1)
         return p, q
 
@@ -730,7 +678,7 @@ class SmartHome:
         Returns power produced by PV and battery.
         :return: pd.Series
         """
-        return self.PV + self.battery['p_dch_bat']
+        return self.PV + self.battery.discharging_power
 
     def plot_load(self):
         """
