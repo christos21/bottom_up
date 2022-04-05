@@ -1,5 +1,5 @@
 import os
-from typing import Union, Tuple, Dict
+from typing import Union, Tuple, Dict, List
 
 import random
 import numpy as np
@@ -10,8 +10,8 @@ import data_config
 import indexes
 from utils import day_type, natural_keys, phase_allocation, PHASES
 
-from battery import Battery
 from solar import PV
+from battery import Battery
 
 
 class SmartHome:
@@ -19,7 +19,7 @@ class SmartHome:
     Class representing a smart home with solar panels and battery.
     """
 
-    def __init__(self, bus_name, home_info):
+    def __init__(self, bus_name: str, home_info: pd.Series):
         """
         Initialization of a smart home object.
         :param bus_name: str
@@ -51,7 +51,7 @@ class SmartHome:
 
     def phase_allocation(
             self,
-            home_info: pd.DataFrame
+            home_info: pd.Series
     ) -> Tuple[bool, Union[None, str], Dict[str: str]]:
         """
         Perform phase allocation for the appliances.
@@ -59,7 +59,7 @@ class SmartHome:
         automatically connected to phase a.
         If the home is three-phased then any electric vehicle will be considered as three-phase as well,
         and the rest of the appliances will be allocated according to phase_allocation() function
-        :param home_info: pd.DataFrame
+        :param home_info: pd.Series
         :return: Tuple[bool, Union[None, str], Dict[str: str]]
         """
         selected_phase = None
@@ -82,10 +82,11 @@ class SmartHome:
 
         return single_phase, selected_phase, appliance_to_phase
 
-    def deduce_battery(self, home_info: pd.DataFrame) -> Tuple[bool, Union[Battery, None]]:
+    @staticmethod
+    def deduce_battery(home_info: pd.Series) -> Tuple[bool, Union[Battery, None]]:
         """
         Deduce if there is battery for this house and creates the Battery object.
-        :param home_info: pd.DataFrame
+        :param home_info: pd.Series
         :return: bool, Battery|None
         """
         if np.isnan(home_info['E_max']):
@@ -106,7 +107,7 @@ class SmartHome:
 
         return has_battery, battery
 
-    def deduce_solar(self, home_info: pd.DataFrame) -> Tuple[bool, Union[PV, None]]:
+    def deduce_solar(self, home_info: pd.Series) -> Tuple[bool, Union[PV, None]]:
         """
         Deduce if there is PV for this house and creates the PV object.
         :param home_info: pd.DataFrame
@@ -116,8 +117,7 @@ class SmartHome:
         pv_profile = 0 if (
                             'PV_profile' not in home_info.index or
                             np.isnan(home_info['PV_profile'])
-                          ) \
-                       else home_info['PV_profile']
+                          ) else home_info['PV_profile']
 
         if pv_rated:
             has_pv = True
@@ -129,15 +129,7 @@ class SmartHome:
 
         return has_pv, pv
 
-
-
-
-
-
-
-
-
-    def set_single_day_aggregated_profile(self, profile_option, day):
+    def set_single_day_aggregated_profile(self, profile_option: int, day: str):
         """
         Creates the load profile for a single day.
         :param profile_option: int
@@ -237,7 +229,7 @@ class SmartHome:
         self.P = p
         self.Q = q
 
-    def set_multiple_days_aggregated_profile(self, days):
+    def set_multiple_days_aggregated_profile(self, days: List[str]):
         """
         Creates the load profile for multiple days.
         :param days: [str]
@@ -310,7 +302,12 @@ class SmartHome:
         self.P = p
         self.Q = q
 
-    def set_load_from_arrays(self, p_array, q_array, days, phase=None):
+    def set_load_from_arrays(
+            self,
+            p_array: np.ndarray,
+            q_array: np.ndarray,
+            days: List[str],
+            phase: Union[str, None] = None):
         """
         Creates the load profile from arrays.
         :param p_array: np.array
@@ -341,7 +338,12 @@ class SmartHome:
         self.P = p.copy()
         self.Q = q.copy()
 
-    def set_pv(self, days, month, from_array=False, pv_array=None):
+    def set_pv(
+            self,
+            days: List[str],
+            month: int,
+            from_array: bool = False,
+            pv_array: Union[np.ndarray, None] = None):
         """
         Creates the production profile for the solar panels.
         :param days: [str]
@@ -369,7 +371,12 @@ class SmartHome:
         else:
             self.total_grid_power = self.PV - p
 
-    def set_pv_and_battery(self, days, month, pv_from_array=False, pv_array=None):
+    def set_pv_and_battery(
+            self,
+            days: List[str],
+            month: int,
+            pv_from_array: bool = False,
+            pv_array: Union[np.ndarray, None] = None):
         """
         Method to set both PV and battery. It also calculates the grid power for each phase.
         :param days: [str]
@@ -382,16 +389,12 @@ class SmartHome:
         self.set_battery()
         self.calculate_grid_power()
 
-
-
-
-
-    def reset_pv_and_battery_values(self, df):
+    def reset_pv_and_battery_values(self, df: pd.Series):
         """
         Method that resets PV and battery properties. The time-series for PV production and
         battery charging/discharging are set to None.
         A new dataframe is needed including the properties of the new PV and battery.
-        :param df: pd.DataFrame
+        :param df: pd.Series
         :return:
         """
 
@@ -427,25 +430,12 @@ class SmartHome:
         # the consumed power (loads + charging)
         self.grid_power = temp_pv - self.P - temp_bat_ch + temp_bat_dch
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    def mean_auto_consumption_rate(self, battery=True):
+    def mean_auto_consumption_rate(self, battery: bool = True):
         """
         Returns mean auto consumption rate. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
         :param battery: bool
-        :return: np.Series
+        :return: pd.Series
         """
         if battery and self.has_battery:
             r = indexes.mean_auto_consumption_rate(gen=self.PV,  # + self.battery['p_dch_bat'],
@@ -456,7 +446,7 @@ class SmartHome:
 
         return r
 
-    def cover_factors(self, battery=True):
+    def cover_factors(self, battery: bool = True):
         """
         Returns cover factors. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
@@ -471,7 +461,7 @@ class SmartHome:
 
         return gamma_s, gamma_d
 
-    def load_match_index(self, interval='1h', battery=True):
+    def load_match_index(self, interval: str = '1h', battery: bool = True):
         """
         Returns load match index. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
@@ -489,7 +479,7 @@ class SmartHome:
 
         return lmi
 
-    def loss_of_load_probability(self, battery=True):
+    def loss_of_load_probability(self, battery: bool = True):
         """
         Returns loss of load probability. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
@@ -504,7 +494,7 @@ class SmartHome:
 
         return lolp
 
-    def peaks_above_limit(self, p_limit=5000, battery=True):
+    def peaks_above_limit(self, p_limit: float = 5000., battery: bool = True):
         """
         Returns peaks above limit. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
@@ -519,7 +509,7 @@ class SmartHome:
             pal = indexes.peaks_above_limit(p_exchange=self.PV - self.P.sum(axis=1), p_limit=p_limit)
         return pal
 
-    def no_grid_interaction_probability(self, period='15min', limit=0.001, battery=True):
+    def no_grid_interaction_probability(self, period: str = '15min', limit: float = 0.001, battery: bool = True):
         """
         Returns no grid interaction probability. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
@@ -538,7 +528,7 @@ class SmartHome:
                                                            period=period, limit=limit)
         return ngip
 
-    def one_percent_peak_power(self, period='1s', battery=True):
+    def one_percent_peak_power(self, period: str = '1s', battery: bool = True):
         """
         Returns one percent peak power. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV. The argument 'period' is used in case down-sampling is preferred.
@@ -552,7 +542,7 @@ class SmartHome:
             opp = indexes.one_percent_peak_power(p_exchange=self.PV - self.P.sum(axis=1), period=period)
         return opp
 
-    def capacity_factor(self, battery=True):
+    def capacity_factor(self, battery: bool = True):
         """
         Returns capacity factor. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
@@ -565,7 +555,7 @@ class SmartHome:
             cf = indexes.capacity_factor(p_exchange=self.PV - self.P.sum(axis=1), p_cap=self.p_cap)
         return cf
 
-    def self_consumption_rate(self, battery=True):
+    def self_consumption_rate(self, battery: bool = True):
         """
         Returns self consumption rate. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
@@ -580,7 +570,7 @@ class SmartHome:
 
         return scr
 
-    def self_sufficiency_rate(self, battery=True):
+    def self_sufficiency_rate(self, battery: bool = True):
         """
         Returns self sufficiency rate. If 'battery' is False or the household has no battery,
         the index is calculated considering only PV.
