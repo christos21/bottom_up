@@ -9,7 +9,7 @@ from scipy.io import loadmat
 
 from smart_home import SmartHome
 from utils import check_for_consecutive_days, PHASES
-from power_flow import solve_power_flow, calculate_passive_network_losses_from_power_flow
+from power_flow import solve_power_flow, calculate_passive_network_losses_from_power_flow, get_grid_info_from_dss
 from indexes import substation_reserve_capacity, feeder_loss_to_load_ratio, voltage_unbalance_factors, \
     losses_to_load_ratio, losses_reduction_index, mean_voltage_variance, voltage_level_quantification_index, \
     average_feeding_loading_index
@@ -80,6 +80,10 @@ class SmartGrid:
             return self.homes[home]
         elif isinstance(home, int):
             return self.homes[self.int_to_home[home]]
+
+    @staticmethod
+    def grid_parameters(dss_path):
+        return get_grid_info_from_dss(dss_path)
 
     def set_simulation_parameters(self, simulation_file):
         """
@@ -360,7 +364,7 @@ class SmartGrid:
 
         return homes_with_battery
 
-    def calculate_grid_indexes(self, path_to_grid_params, path_to_results, line_limits_file):
+    def calculate_grid_indexes(self, power_flow_results, grid_params, line_limits_file):
         """
         Calculates some grid-related indexes for PV-BESS assessment.
         For the calculation of these indexes, power flow should be solved and the results should be stored.
@@ -368,15 +372,13 @@ class SmartGrid:
         created by the solve_power_flow method.
 
         :param path_to_grid_params: str
-        :param path_to_results: str
+        :param power_flow_results: str
         :return:
         """
 
-        assert os.path.exists(path_to_grid_params)
-        assert os.path.exists(path_to_results)
+        assert os.path.exists(power_flow_results)
 
-        with open(path_to_grid_params, 'r') as fp:
-            params = json.load(fp)
+        params = grid_params
 
         # get grid parameters
         S_substation = params['S_substation']
@@ -389,26 +391,18 @@ class SmartGrid:
 
         load_names = list(self.homes.keys())
 
-        losses = pd.read_csv(os.path.join(path_to_results, 'Losses.csv'), index_col=0)
-        line_power = pd.read_csv(os.path.join(path_to_results, 'line_power.csv'), index_col=0)
-        Va = pd.read_csv(os.path.join(path_to_results, 'Va.csv'), index_col=0)
-        Vb = pd.read_csv(os.path.join(path_to_results, 'Vb.csv'), index_col=0)
-        Vc = pd.read_csv(os.path.join(path_to_results, 'Vc.csv'), index_col=0)
+        losses = pd.read_csv(os.path.join(power_flow_results, 'Losses.csv'), index_col=0)
+        line_power = pd.read_csv(os.path.join(power_flow_results, 'line_power.csv'), index_col=0)
+        Va = pd.read_csv(os.path.join(power_flow_results, 'Va.csv'), index_col=0)
+        Vb = pd.read_csv(os.path.join(power_flow_results, 'Vb.csv'), index_col=0)
+        Vc = pd.read_csv(os.path.join(power_flow_results, 'Vc.csv'), index_col=0)
 
-        Va_vec = pd.read_csv(os.path.join(path_to_results, 'Va_vec.csv'), index_col=0).astype(complex)
-        Vb_vec = pd.read_csv(os.path.join(path_to_results, 'Vb_vec.csv'), index_col=0).astype(complex)
-        Vc_vec = pd.read_csv(os.path.join(path_to_results, 'Vc_vec.csv'), index_col=0).astype(complex)
+        Va_vec = pd.read_csv(os.path.join(power_flow_results, 'Va_vec.csv'), index_col=0).astype(complex)
+        Vb_vec = pd.read_csv(os.path.join(power_flow_results, 'Vb_vec.csv'), index_col=0).astype(complex)
+        Vc_vec = pd.read_csv(os.path.join(power_flow_results, 'Vc_vec.csv'), index_col=0).astype(complex)
 
-        transformer_power = pd.read_csv(os.path.join(path_to_results, 'transformer_power.csv'), index_col=0)
+        transformer_power = pd.read_csv(os.path.join(power_flow_results, 'transformer_power.csv'), index_col=0)
 
-        passive_losses = pd.read_csv(os.path.join(path_to_results, 'Losses_for_passive_network.csv'), index_col=0)
-        passive_va = pd.read_csv(os.path.join(path_to_results, 'Va_for_passive_network.csv'), index_col=0)
-        passive_vb = pd.read_csv(os.path.join(path_to_results, 'Vb_for_passive_network.csv'), index_col=0)
-        passive_vc = pd.read_csv(os.path.join(path_to_results, 'Vc_for_passive_network.csv'), index_col=0)
-
-        passive_va_vec = pd.read_csv(os.path.join(path_to_results, 'Va_vec_for_passive_network.csv'), index_col=0).astype(complex)
-        passive_vb_vec = pd.read_csv(os.path.join(path_to_results, 'Vb_vec_for_passive_network.csv'), index_col=0).astype(complex)
-        passive_vc_vec = pd.read_csv(os.path.join(path_to_results, 'Vc_vec_for_passive_network.csv'), index_col=0).astype(complex)
 
         # calculate power balance index
         self.indexes['pbi'] = self.power_balance_index(bus_names, load_names, bus_connections, initial_bus)
@@ -427,20 +421,32 @@ class SmartGrid:
 
         # calculate lri and llr
         self.indexes['llr'] = losses_to_load_ratio(total_load, losses.P)
-        self.indexes['lri'] = losses_reduction_index(losses.P, passive_losses.P)
 
         # sigma
         self.indexes['mean_voltage_variance_va'] = mean_voltage_variance(Va)
         self.indexes['mean_voltage_variance_vb'] = mean_voltage_variance(Vb)
         self.indexes['mean_voltage_variance_vc'] = mean_voltage_variance(Vc)
 
-
-        # vlqi
-        self.indexes['vlqi'] = voltage_level_quantification_index(Va_vec, Vb_vec, Vc_vec, passive_va_vec, passive_vb_vec, passive_vc_vec, r_to_bus)
-
         # afli
         line_limits = pd.read_csv(line_limits_file, index_col=0, header=None, squeeze=True).to_dict()
         self.indexes['afli'] = average_feeding_loading_index(length_to_bus, line_length, line_limits, line_power)
+
+        if os.path.exists(os.path.join(power_flow_results, 'Losses_for_passive_network.csv')):
+            passive_losses = pd.read_csv(os.path.join(power_flow_results, 'Losses_for_passive_network.csv'),
+                                         index_col=0)
+
+            passive_va_vec = pd.read_csv(os.path.join(power_flow_results, 'Va_vec_for_passive_network.csv'),
+                                         index_col=0).astype(complex)
+            passive_vb_vec = pd.read_csv(os.path.join(power_flow_results, 'Vb_vec_for_passive_network.csv'),
+                                         index_col=0).astype(complex)
+            passive_vc_vec = pd.read_csv(os.path.join(power_flow_results, 'Vc_vec_for_passive_network.csv'),
+                                         index_col=0).astype(complex)
+
+            self.indexes['lri'] = losses_reduction_index(losses.P, passive_losses.P)
+
+            # vlqi
+            self.indexes['vlqi'] = voltage_level_quantification_index(Va_vec, Vb_vec, Vc_vec, passive_va_vec,
+                                                                      passive_vb_vec, passive_vc_vec, r_to_bus)
 
 
     def power_balance_index(self, bus_names, load_names, bus_connections, initial_bus):
