@@ -69,33 +69,3 @@ class PV:
 
         self.P = three_phase_p
 
-
-
-#
-# class PV:
-#     """
-#     Class representing solar panel at free node of the grid.
-#     """
-#
-#     def __init__(self, bus, pv_info):
-#         """
-#         Initialization of the PV based on a dataframe as explained in the manual.
-#         These type of PV are always three-phase but in this project we can create single-phase as well.
-#
-#         :param bus: str, Name of the bus that the panel is connected to.
-#         :param pv_info: pd.DataFrame
-#         """
-#         self.bus = bus
-#         self.pv_rated = pv_info['rated']
-#         self.P = None
-#         self.single_phase = True if pv_info['phase_number'] in [1, 2, 3] else False
-#
-#         self.pv_profile = 0 if ('PV_profile' not in pv_info.index or np.isnan(pv_info['PV_profile'])) \
-#             else pv_info['PV_profile']
-#
-#         if self.single_phase:
-#             assert pv_info['phase_number'] in [1, 2, 3]
-#             self.selected_phase = PHASES[pv_info['phase_number']-1]
-#         else:
-#             self.selected_phase = None
-#
