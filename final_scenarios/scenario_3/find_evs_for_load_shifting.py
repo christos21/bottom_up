@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import tensorflow as tf
 
-from smart_grid import SmartGrid
+from components.smart_grid import SmartGrid
 
 base_folder = 'final_scenarios/scenario_3/config_files'
 

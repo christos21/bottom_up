@@ -5,7 +5,7 @@ import random
 import opendssdirect as dss
 
 from utils import sequential_voltage_vectors
-from smart_grid import SmartGrid
+from components.smart_grid import SmartGrid
 
 
 base_folder = 'final_scenarios/scenario_3/config_files'

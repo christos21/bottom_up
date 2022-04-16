@@ -2,7 +2,7 @@ import os.path
 import pandas as pd
 import opendssdirect as dss
 
-from smart_grid import SmartGrid
+from components.smart_grid import SmartGrid
 from utils import sequential_voltage_vectors
 from power_flow import calculate_passive_network_losses_from_power_flow
 
