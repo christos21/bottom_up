@@ -1,6 +1,6 @@
 from components.smart_grid import SmartGrid
 
-grid_csv        = 'final_scenarios/scenario_1/config_files/grid_IEEE.csv'
+grid_csv        = 'test_scripts/grid_IEEE.csv'
 simulation_file = 'final_scenarios/scenario_1/config_files/simulation_parameters.csv'
 solar_parks_csv = 'final_scenarios/scenario_1/config_files/generators.csv'
 
@@ -19,3 +19,4 @@ grid.P.plot()
 
 # calculate the index "loss of load probability" for the 15th house
 print(grid[14].loss_of_load_probability())
+
