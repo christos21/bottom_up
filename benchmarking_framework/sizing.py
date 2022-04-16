@@ -26,7 +26,7 @@ def pv_bess_sizing(p, normalized_pv, single_phase,
         p_bat = min(p_bat, p_bat_max)
 
     # Calculate the excess of energy produced by the PV, only during production hours
-    energy_excess = np.sum((ratio * 1000 * normalized_pv - p.values) * (normalized_pv > 0)) / (1000 * 3600)
+    energy_excess = np.sum((ratio * normalized_pv - p.values) * (normalized_pv > 0)) / 3600
 
     if energy_excess < e_bat_min:
         e_bat = 0
