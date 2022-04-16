@@ -105,7 +105,7 @@ class Battery:
                 # New SoC of the battery
                 SoC[t + 1] = SoC[t] - (Pdch_bat[t] / self.dch_eff) / (3600 * self.capacity)
 
-        self.soc = pd.Series(index=index, data=SoC)
+        self.soc = pd.Series(index=index, data=SoC[1:])
         self.charging_power = pd.Series(index=index, data=1000*Pch_bat)
         self.discharging_power = pd.Series(index=index, data=1000*Pdch_bat)
 

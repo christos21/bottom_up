@@ -10,8 +10,8 @@ import data_config
 import indexes
 from utils import day_type, natural_keys, phase_allocation, PHASES
 
-from solar import PV
-from battery import Battery
+from components.solar import PV
+from components.battery import Battery
 
 
 class SmartHome:
@@ -52,7 +52,7 @@ class SmartHome:
     def phase_allocation(
             self,
             home_info: pd.Series
-    ) -> Tuple[bool, Union[None, str], Dict[str: str]]:
+    ) -> Tuple[bool, Union[None, str], Dict[str, str]]:
         """
         Perform phase allocation for the appliances.
         If home is single phase, then it is connected either to a phase specified in home_info or it is
@@ -97,9 +97,9 @@ class SmartHome:
 
             battery_params = \
                 {
-                    key.lower(): home_info[key] for key in ['SoC_init', 'P_max_bat', 'E_max',
-                                                            'SoC_min', 'SoC_max', 'ch_eff',
-                                                            'dch_eff', 't_lpf_bat']
+                    key: home_info[key] for key in ['SoC_init', 'P_max_bat', 'E_max',
+                                                    'SoC_min', 'SoC_max', 'ch_eff',
+                                                    'dch_eff', 't_lpf_bat']
                     if not np.isnan(home_info[key])
                 }
 
@@ -352,8 +352,11 @@ class SmartHome:
         :param pv_array: np.array
         :return:
         """
-        self.pv.set_power(days, month, from_array, pv_array)
-        self.PV = self.pv.P.sum(axis=1)
+        if self.has_pv:
+            self.pv.set_power(days, month, from_array, pv_array)
+            self.PV = self.pv.P.sum(axis=1)
+        else:
+            self.PV = pd.Series(index=self.P.index, data=0)
 
     def set_battery(self):
         """
@@ -416,15 +419,17 @@ class SmartHome:
         # In case of single phase home both PV and battery operate in the selected phase.
         if self.single_phase:
             temp_pv[self.selected_phase] = self.PV.values
-            temp_bat_ch[self.selected_phase] = self.battery.charging_power.values
-            temp_bat_dch[self.selected_phase] = self.battery.discharging_power.values
+            if self.has_battery:
+                temp_bat_ch[self.selected_phase] = self.battery.charging_power.values
+                temp_bat_dch[self.selected_phase] = self.battery.discharging_power.values
         else:
             # In case of three-phase homes, both PV production and battery charging/discharging
             # are split between the phases.
             for phase in temp_pv.columns:
                 temp_pv[phase] = self.PV.values/3
-                temp_bat_ch[phase] = self.battery.charging_power.values/3
-                temp_bat_dch[phase] = self.battery.discharging_power.values/3
+                if self.has_battery:
+                    temp_bat_ch[phase] = self.battery.charging_power.values/3
+                    temp_bat_dch[phase] = self.battery.discharging_power.values/3
 
         # the grid power for each phase is calculated as all the produced power (PV + discharging) minus
         # the consumed power (loads + charging)

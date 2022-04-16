@@ -1,13 +1,12 @@
-import pandas as pd
-import numpy as np
-import warnings
-import sys
-import matplotlib.pyplot as plt
-import json
 import os
+import sys
+import warnings
+import numpy as np
+import pandas as pd
 from scipy.io import loadmat
+import matplotlib.pyplot as plt
 
-from smart_home import SmartHome
+from components.smart_home import SmartHome
 from utils import check_for_consecutive_days, PHASES
 from power_flow import solve_power_flow, calculate_passive_network_losses_from_power_flow, get_grid_info_from_dss
 from indexes import substation_reserve_capacity, feeder_loss_to_load_ratio, voltage_unbalance_factors, \
