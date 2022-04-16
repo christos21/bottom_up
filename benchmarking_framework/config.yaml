@@ -1,8 +1,8 @@
 input_files:
-    grid_csv: 'final_scenarios/scenario_1/config_files/grid_IEEE.csv'
-    simulation_file: 'final_scenarios/scenario_1/config_files/simulation_parameters.csv'
+    grid_csv: 'final_scenarios/scenario_3/config_files/grid_IEEE.csv'
+    simulation_file: 'final_scenarios/scenario_3/config_files/simulation_parameters.csv'
     line_limits_file: 'final_scenarios/line_limits.csv'
-    dss_file: 'final_scenarios/scenario_1/config_files/IEEE.dss'
+    dss_file: 'final_scenarios/scenario_3/config_files/IEEE.dss'
 
 
 output_files:
@@ -22,16 +22,11 @@ power_flow_params:
     starting_second_offset: 30
 
 violations:
-    # boolean variable set to True if we want a scenario with overvoltage but no problem with line thermal limits
-    overvoltage_and_not_thermal: True
-    # boolean variable set to True if we want a scenario with both overvoltage and problem with line thermal limits
-    overvoltage_and_thermal: True
-
-    # If none of the two binary variables is set to True, the algorithm will find a scenario with over-voltage
-    # regardless if there is a thermal problem or not.
-
-    # pu limit for an over-voltage
-    pu_limit: 1.103
+    overvoltage: False
+    undervoltage: True
+    thermal: True
+    overvoltage_pu_limit: 1.103
+    undervoltage_pu_limit: 0.9
 
 
 sizing_params:

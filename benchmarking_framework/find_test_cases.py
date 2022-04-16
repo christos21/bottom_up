@@ -1,8 +1,8 @@
 """
-This script performs tests for PV and battery penetration on a smart grid and checks if there is overvoltage
-or thermal problems at the lines.
+This script performs tests for PV and battery penetration on a smart grid and checks if there is
+overvoltage/undervoltage or thermal problems at the lines.
 
-Specifically, the user should fill all the necessary parameters in the configuration file overvoltage_config.yaml,
+Specifically, the user should fill all the necessary parameters in the configuration file config.yaml,
 including the following files:
 
 1) a csv file with appliances and appliance profiles for each home,
@@ -13,7 +13,7 @@ including the following files:
 NOTE: The name of each home in file 1 should be the bus where it is connected. This bus MUST appear in file 4.
 
 The algorithm tries some random scenarios by installing PV and batteries to random households.
-If there is an overvoltage and/or thermal problem, the results are saved as csv files.
+If there is an overvoltage/undervoltage and/or thermal problem, the results are saved as csv files.
 """
 
 import os
@@ -30,7 +30,7 @@ from monte_carlo_sitting import random_sitting
 
 from utils import pv_profile_generator, check_current_limits, sequential_voltage_vectors
 
-with open('benchmarking_framework/overvoltage_config.yaml') as f:
+with open('benchmarking_framework/config.yaml') as f:
     overvoltage_dict = yaml.safe_load(f)
 
 
@@ -51,9 +51,18 @@ POWER_FLOW_NUMBER_OF_SECONDS        = overvoltage_dict['power_flow_params']['num
 POWER_FLOW_STARTING_SECOND_OFFSET   = overvoltage_dict['power_flow_params']['starting_second_offset']
 
 
-OVER_VOLTAGE_AND_NOT_THERMAL_LIMITS = overvoltage_dict['violations']['overvoltage_and_not_thermal']
-OVER_VOLTAGE_AND_THERMAL_LIMITS     = overvoltage_dict['violations']['overvoltage_and_thermal']
-OVER_VOLTAGE_PU_LIMIT               = overvoltage_dict['violations']['pu_limit']
+OVERVOLTAGE = overvoltage_dict['violations']['overvoltage']
+UNDERVOLTAGE = overvoltage_dict['violations']['undervoltage']
+THERMAL = overvoltage_dict['violations']['thermal']
+OVERVOLTAGE_PU = overvoltage_dict['violations']['overvoltage_pu_limit']
+UNDERVOLTAGE_PU = overvoltage_dict['violations']['undervoltage_pu_limit']
+
+assert (OVERVOLTAGE and not UNDERVOLTAGE) or (UNDERVOLTAGE and not OVERVOLTAGE), \
+    'Either overvoltage or undervoltage should be set to True; not both'
+
+# OVER_VOLTAGE_AND_NOT_THERMAL_LIMITS = overvoltage_dict['violations']['overvoltage_and_not_thermal']
+# OVER_VOLTAGE_AND_THERMAL_LIMITS     = overvoltage_dict['violations']['overvoltage_and_thermal']
+# OVER_VOLTAGE_PU_LIMIT               = overvoltage_dict['violations']['pu_limit']
 
 MAXIMUM_SCENARIOS = overvoltage_dict['maximum_scenarios']
 
@@ -130,7 +139,11 @@ def main():
         grid.set_generators(df_gen)
 
         # for over-voltage check when grid power (production-load) is maximum
-        t = np.argmax(grid.P.sum(axis=1))
+        # and for undervoltage is minimum
+        if OVERVOLTAGE:
+            t = np.argmax(grid.P.sum(axis=1))
+        elif UNDERVOLTAGE:
+            t = np.argmin(grid.P.sum(axis=1))
 
         # solve power flow
         va, vb, vc, ia, ib, ic, _ = solve_power_flow(grid, dss_path=DSS_FILE,
@@ -143,22 +156,30 @@ def main():
         V1_magn = abs(V1)
 
         print('Maximum V1 {}'.format(np.max(V1_magn.values)))
+        print('Minimum V1 {}'.format(np.min(V1_magn.values)))
 
         # Check thermal limits for all phases
-        thermal_limits = check_current_limits(ia, line_limits) and check_current_limits(ib, line_limits) and \
-                         check_current_limits(ic, line_limits)
+        thermal_violation = not (check_current_limits(ia, line_limits) and
+                                 check_current_limits(ib, line_limits) and
+                                 check_current_limits(ic, line_limits))
 
         # STEP 4
         # Check the necessary conditions
-        if OVER_VOLTAGE_AND_THERMAL_LIMITS:
-            pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum() and not thermal_limits
-        elif OVER_VOLTAGE_AND_NOT_THERMAL_LIMITS:
-            pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum() and thermal_limits
-        else:
-            pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum()
+        violation_flag = False
+        if OVERVOLTAGE:
+            if THERMAL:
+                violation_flag = (V1_magn > OVERVOLTAGE_PU).sum().sum() and thermal_violation
+            else:
+                violation_flag = (V1_magn > OVERVOLTAGE_PU).sum().sum() and not thermal_violation
+
+        elif UNDERVOLTAGE:
+            if THERMAL:
+                violation_flag = (V1_magn < UNDERVOLTAGE_PU).sum().sum() and thermal_violation
+            else:
+                violation_flag = (V1_magn < UNDERVOLTAGE_PU).sum().sum() and not thermal_violation
 
         # if the conditions are met, break the while loop
-        if pass_flag:
+        if violation_flag:
             break
 
     # solve power flow again but now save results
