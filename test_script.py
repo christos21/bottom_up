@@ -1,5 +1,5 @@
 # demo script
-from smart_grid import SmartGrid
+from to_be_deleted.smart_grid import SmartGrid
 
 # Initialize the grid. In this case, there are no PV and batteries. By editing the corresponding cells
 # of the csv file, you can add PV and battery to whichever home you prefer.
