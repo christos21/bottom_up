@@ -25,7 +25,7 @@ violations:
     # boolean variable set to True if we want a scenario with overvoltage but no problem with line thermal limits
     overvoltage_and_not_thermal: True
     # boolean variable set to True if we want a scenario with both overvoltage and problem with line thermal limits
-    overvoltage_and_thermal: False
+    overvoltage_and_thermal: True
 
     # If none of the two binary variables is set to True, the algorithm will find a scenario with over-voltage
     # regardless if there is a thermal problem or not.
@@ -34,54 +34,45 @@ violations:
     pu_limit: 1.103
 
 
-# The following parameters will be fixed for all random scenarios
-battery_params:
-    soc_init: 0.1          # initial state of charge for all batteries
-    soc_min: 0.1           # minimum state of charge
-    soc_max: 0.9           # maximum state of charge
-    ch_eff: 0.9            # charging efficiency
-    dch_eff: 0.9           # discharging efficiency
-    t_lpf: 100             # length of low pass filter
-    min_kW: 3              # battery minimum kW
-    max_kW: 6              # battery maximum kW
-    min_kWh: 3             # battery minimum kWh
-    max_kWh: 20            # battery maximum kWh
+sizing_params:
+    p_bat_min: 3              # battery minimum kW
+    p_bat_max: 6              # battery maximum kW
+    e_bat_min: 3              # battery minimum kWh
+    e_bat_max: 20             # battery maximum kWh
+    single_phase_pv_max_p: 5
+    three_phase_pv_max_p: 20
+    three_phase_pv_min_p: 5
+    a: 0.5
+    C: 0.5
 
 
-pv_params:
-    # minimum and maximum power (in kW) for single and three phase PV
-    single_phase_pv_max_power: 5
-    three_phase_pv_max_power: 20
-    three_phase_pv_min_power: 5
+sitting_params:
+    soc_init: 0.1                           # initial state of charge for all batteries
+    soc_min: 0.1                            # minimum state of charge
+    soc_max: 0.9                            # maximum state of charge
+    ch_eff: 0.9                             # charging efficiency
+    dch_eff: 0.9                            # discharging efficiency
+    t_lpf_bat: 100                          # length of low pass filter
+    probability_of_pv: 0.7                  # probability that a home has PV
+    probability_of_battery_given_pv: 0.4    # probability that a home has a battery given that it has PV
+    pv_power_for_solar_parks: 20            # PV power (kW) for PV installed at free nodes
+    number_of_solar_parks: 8                # Number of PVs that will be installed at free nodes
+    available_nodes_for_solar_parks:        # free terminal nodes, where PV can be installed
+        - 'b3'
+        - 'b16'
+        - 'b44'
+        - 'b38'
+        - 'b68'
+        - 'b72'
+        - 'b80'
+        - 'b100'
+        - 'b123'
+        - 'b145'
+        - 'b160'
+        - 'b180'
+        - 'b202'
 
-    # PV power (kW) for PV installed at free nodes
-    pv_power_for_solar_parks_at_free_nodes: 20
-
-
-# probability that a home has PV
-probability_of_pv: 0.7
-
-# probability that a home has a battery given that it has PV
-probability_of_battery_given_pv: 0.4
-
-# Number of PVs that will be installed at free nodes
-number_of_solar_parks_at_free_nodes: 8
 
 # Maximum number of scenarios to check
 maximum_scenarios: 100
 
-# free terminal nodes, where PV can be installed
-nodes_for_solar_parks:
-    - 'b3'
-    - 'b16'
-    - 'b44'
-    - 'b38'
-    - 'b68'
-    - 'b72'
-    - 'b80'
-    - 'b100'
-    - 'b123'
-    - 'b145'
-    - 'b160'
-    - 'b180'
-    - 'b202'

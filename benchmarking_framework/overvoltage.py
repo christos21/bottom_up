@@ -25,6 +25,9 @@ import pandas as pd
 from power_flow import solve_power_flow
 from components.smart_grid import SmartGrid
 
+from sizing import pv_bess_sizing
+from monte_carlo_sitting import random_sitting
+
 from utils import pv_profile_generator, check_current_limits, sequential_voltage_vectors
 
 with open('benchmarking_framework/overvoltage_config.yaml') as f:
@@ -52,32 +55,10 @@ OVER_VOLTAGE_AND_NOT_THERMAL_LIMITS = overvoltage_dict['violations']['overvoltag
 OVER_VOLTAGE_AND_THERMAL_LIMITS     = overvoltage_dict['violations']['overvoltage_and_thermal']
 OVER_VOLTAGE_PU_LIMIT               = overvoltage_dict['violations']['pu_limit']
 
-
-SOC_INIT        = overvoltage_dict['battery_params']['soc_init']
-SOC_MIN         = overvoltage_dict['battery_params']['soc_min']
-SOC_MAX         = overvoltage_dict['battery_params']['soc_max']
-CH_EFF          = overvoltage_dict['battery_params']['ch_eff']
-DCH_EFF         = overvoltage_dict['battery_params']['dch_eff']
-T_LPF_BAT       = overvoltage_dict['battery_params']['t_lpf']
-BATTERY_MIN_KW  = overvoltage_dict['battery_params']['min_kW']
-BATTERY_MAX_KW  = overvoltage_dict['battery_params']['max_kW']
-BATTERY_MIN_KWH = overvoltage_dict['battery_params']['min_kWh']
-BATTERY_MAX_KWH = overvoltage_dict['battery_params']['max_kW']
-
-
-SINGLE_PHASE_PV_MAX_POWER               = overvoltage_dict['pv_params']['single_phase_pv_max_power']
-THREE_PHASE_PV_MAX_POWER                = overvoltage_dict['pv_params']['three_phase_pv_max_power']
-THREE_PHASE_PV_MIN_POWER                = overvoltage_dict['pv_params']['three_phase_pv_min_power']
-PV_POWER_FOR_SOLAR_PARKS_AT_FREE_NODES  = overvoltage_dict['pv_params']['pv_power_for_solar_parks_at_free_nodes']
-
-
-PROBABILITY_OF_PV                   = overvoltage_dict['probability_of_pv']
-PROBABILITY_OF_BATTERY_GIVEN_PV     = overvoltage_dict['probability_of_battery_given_pv']
-NUMBER_OF_SOLAR_PARKS_AT_FREE_NODES = overvoltage_dict['number_of_solar_parks_at_free_nodes']
-AVAILABLE_NODES_FOR_SOLAR_PARKS     = overvoltage_dict['nodes_for_solar_parks']
-
-
 MAXIMUM_SCENARIOS = overvoltage_dict['maximum_scenarios']
+
+sizing_dict = overvoltage_dict['sizing_params']
+sitting_dict = overvoltage_dict['sitting_params']
 
 
 # DO NOT CHANGE THIS
@@ -87,111 +68,65 @@ ROWS = ['SoC_init', 'P_max_bat', 'E_max', 'SoC_min', 'SoC_max', 'PV_rated', 'ch_
 
 def main():
 
+    # STEP 1
     # Create the SmartGrid object and set the simulation parameters as well as the grid power.
     grid = SmartGrid(csv_file=GRID_CSV, name='IEEE')
     grid.set_simulation_parameters(SIMULATION_FILE)
     grid.set_load_consumption()
 
-    # Read line limits as a dict
-    line_limits = pd.read_csv(LINE_LIMITS_FILE, index_col=0, header=None, squeeze=True).to_dict()
-
     # read month in order to get pv power
     simulation_params = pd.read_csv(SIMULATION_FILE, index_col=0, header=None, squeeze=True).to_dict()
     month = simulation_params['month']
-
-    # read pv profile to get mean daily production
     pv_power = pv_profile_generator(month)
-    mean_daily_pv_power = np.mean(pv_power)
+
+    # Read line limits as a dict
+    line_limits = pd.read_csv(LINE_LIMITS_FILE, index_col=0, header=None, squeeze=True).to_dict()
+
+    sizing_dict['normalized_pv'] = pv_power
 
     # Get house names
-    df = pd.read_csv(GRID_CSV, index_col=0)
-    cols = df.columns
+    houses = pd.read_csv(GRID_CSV, index_col=0).columns
+
+    sitting_dict['houses'] = houses
+    sitting_dict['pv_bes_parameters'] = ROWS
 
     # Initialize a dataframe for PV and battery parameters
-    df = pd.DataFrame(columns=cols, index=ROWS)
+    df = pd.DataFrame(columns=houses, index=ROWS)
 
     # for each home we should find pv_rated, battery maximum power and energy
-
     # initialize empty lists
     pv_rated_per_home = []
-    bat_p_max_per_home = []
-    bat_e_max_per_home = []
+    p_bat_per_home = []
+    e_bat_per_home = []
 
-    for home in cols:
-        # Calculate pv_rated for each home as the mean daily consumption over mean daily production
-        home_mean_daily_power = grid.homes[home].P.sum(axis=1).mean() / 1000
-        ratio = home_mean_daily_power / mean_daily_pv_power
-        ratio = np.ceil(ratio)
+    # STEP 2
+    for home in houses:
+        sizing_dict['p'] = grid.homes[home].P.sum(axis=1) / 1000
+        sizing_dict['single_phase'] = grid.homes[home].single_phase
 
-        # apply corresponding limits for single and three-phase PV
-        if grid.homes[home].single_phase:
-            pv_rated = min(ratio, SINGLE_PHASE_PV_MAX_POWER)
-        else:
-            pv_rated = min(THREE_PHASE_PV_MAX_POWER, max(ratio, THREE_PHASE_PV_MIN_POWER))
+        pv_rated, p_bat, e_bat = pv_bess_sizing(**sizing_dict)
 
         pv_rated_per_home.append(pv_rated)
+        p_bat_per_home.append(p_bat)
+        e_bat_per_home.append(e_bat)
 
-        # Battery power is half the PV power
-        battery_p = np.ceil(pv_rated / 2)
-        if battery_p < BATTERY_MIN_KW:
-            bat_p_max_per_home.append(0)
-        else:
-            bat_p_max_per_home.append(min(battery_p, BATTERY_MAX_KW))
+    sitting_dict['pv_rated_per_home'] = pv_rated_per_home
+    sitting_dict['e_bat_per_home'] = e_bat_per_home
+    sitting_dict['p_bat_per_home'] = p_bat_per_home
 
-        # Calculate the excess of energy produced by the PV, only during production hours
-        energy_excess = np.sum((ratio * 1000 * pv_power - grid.homes[home].P.sum(axis=1).values) * (pv_power > 0)) / (
-                    1000 * 3600)
-
-        if energy_excess < BATTERY_MIN_KWH:
-            bat_e_max_per_home.append(0)
-        else:
-            bat_e_max_per_home.append(min(np.ceil(energy_excess), BATTERY_MAX_KWH))
-
-    for i in range(len(bat_p_max_per_home)):
-        # in case the maximum battery charging power is higher than half the capacity of the battery, set the
-        # battery charging power to capacity/2.
-        if bat_p_max_per_home[i] > bat_e_max_per_home[i] / 2:
-            bat_p_max_per_home[i] = bat_e_max_per_home[i] / 2
-
+    # STEP 3
     # In this loop we check random scenarios for over-voltage or thermal problems.
-    # For each scenario, PV and batteries are randomly located.
 
     attempts = 0
     while attempts < MAXIMUM_SCENARIOS:
         attempts += 1
         print('Attempt number {}'.format(attempts))
 
-        # re-initialize the df inside the loop
-        df = pd.DataFrame(columns=cols, index=ROWS)
-
-        # for each home
-        for k, home in enumerate(cols):
-            # Set randomly PV based on the probability but pv_rated should be > 0
-            if np.random.random() < PROBABILITY_OF_PV and pv_rated_per_home[k] > 0:
-
-                df.loc['PV_rated', home] = pv_rated_per_home[k]
-
-                # Set randomly battery based on the probability but the home MUST have PV
-                if np.random.random() < PROBABILITY_OF_BATTERY_GIVEN_PV and bat_e_max_per_home[k] > 0 \
-                        and bat_p_max_per_home[k] > 0:
-
-                    df.loc['SoC_init', home] = SOC_INIT
-                    df.loc['SoC_min', home] = SOC_MIN
-                    df.loc['SoC_max', home] = SOC_MAX
-                    df.loc['ch_eff', home] = CH_EFF
-                    df.loc['dch_eff', home] = DCH_EFF
-                    df.loc['t_lpf_bat', home] = T_LPF_BAT
-
-                    df.loc['P_max_bat', home] = bat_p_max_per_home[k]
-                    df.loc['E_max', home] = bat_e_max_per_home[k]
+        # For each scenario, PV and batteries are randomly located.
+        df, df_gen = random_sitting(**sitting_dict)
 
         # Apply the new PVs and batteries in order to get the new total power for each home
         grid.reset_pv_and_battery(df)
-
-        # Add random generators
-        gen_buses = np.random.choice(AVAILABLE_NODES_FOR_SOLAR_PARKS, NUMBER_OF_SOLAR_PARKS_AT_FREE_NODES, replace=False)
-        df_gen = pd.DataFrame(columns=gen_buses, index=['phase_number', 'rated'])
-        df_gen.loc['rated'] = PV_POWER_FOR_SOLAR_PARKS_AT_FREE_NODES
         grid.set_generators(df_gen)
 
         # for over-voltage check when grid power (production-load) is maximum
@@ -213,6 +148,7 @@ def main():
         thermal_limits = check_current_limits(ia, line_limits) and check_current_limits(ib, line_limits) and \
                          check_current_limits(ic, line_limits)
 
+        # STEP 4
         # Check the necessary conditions
         if OVER_VOLTAGE_AND_THERMAL_LIMITS:
             pass_flag = (V1_magn > OVER_VOLTAGE_PU_LIMIT).sum().sum() and not thermal_limits
@@ -237,19 +173,6 @@ def main():
     # save positive sequence voltage
     v1_df = pd.DataFrame(data=abs(V1), index=va.index)
     v1_df.to_csv(V1_FILE)
-
-    # Save state of charge for all batteries
-    socs = []
-    cols = []
-    for k, home in enumerate(grid.homes.keys()):
-        if grid.homes[home].has_battery:
-            cols.append(home)
-            socs.append(grid.homes[home].battery['soc'].
-                        iloc[t-POWER_FLOW_STARTING_SECOND_OFFSET:
-                             t+POWER_FLOW_NUMBER_OF_SECONDS-POWER_FLOW_STARTING_SECOND_OFFSET].values)
-
-    # socs_df = pd.DataFrame(columns=v1_df.index, index=cols, data=socs).T
-    # socs_df.to_csv(os.path.join(FOLDER_TO_SAVE_RESULTS, 'soc.csv'))
 
 
 if __name__ == "__main__":
