@@ -19,7 +19,7 @@ If there is an over-voltage and/or thermal problem, the results are saved as csv
 
 import os.path
 from power_flow import solve_power_flow
-from smart_grid import SmartGrid
+from to_be_deleted.smart_grid import SmartGrid
 from utils import pv_profile_generator, check_current_limits, sequential_voltage_vectors
 import pandas as pd
 import numpy as np
@@ -27,9 +27,9 @@ import numpy as np
 
 # specify grid, simulation and line limits csv paths as well as a dss file
 GRID_CSV = 'test_cases/test_case_2_over_voltage/grid_IEEE.csv'
-SIMULATION_FILE = 'test_cases/test_case_2_over_voltage/simulation_parameters.csv'
-LINE_LIMITS_FILE = 'test_cases/line_limits.csv'
-DSS_FILE = 'test_cases/test_case_2_over_voltage/IEEE.dss'
+SIMULATION_FILE = '../test_cases/test_case_2_over_voltage/simulation_parameters.csv'
+LINE_LIMITS_FILE = '../test_cases/line_limits.csv'
+DSS_FILE = '../test_cases/test_case_2_over_voltage/IEEE.dss'
 
 # Folder where the results will be saved
 FOLDER_TO_SAVE_RESULTS = 'over_voltage_9_Nov_1s'
