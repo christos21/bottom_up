@@ -1,8 +1,8 @@
 input_files:
-    grid_csv: 'final_scenarios/scenario_3/config_files/grid_IEEE.csv'
-    simulation_file: 'final_scenarios/scenario_3/config_files/simulation_parameters.csv'
+    grid_csv: 'final_scenarios/scenario_1/config_files/grid_IEEE.csv'
+    simulation_file: 'final_scenarios/scenario_1/config_files/simulation_parameters.csv'
     line_limits_file: 'final_scenarios/line_limits.csv'
-    dss_file: 'final_scenarios/scenario_3/config_files/IEEE.dss'
+    dss_file: 'final_scenarios/scenario_1/config_files/IEEE.dss'
 
 
 output_files:
@@ -22,8 +22,8 @@ power_flow_params:
     starting_second_offset: 30
 
 violations:
-    overvoltage: False
-    undervoltage: True
+    overvoltage: True
+    undervoltage: False
     thermal: True
     overvoltage_pu_limit: 1.103
     undervoltage_pu_limit: 0.9
