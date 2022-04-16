@@ -8,6 +8,9 @@ journal_scripts
 under_*
 extract_more_monthly_pv_profiles.py
 ninja_thessaloniki_2019.csv
+overvoltage_scenario
+to_be_deleted
+test_script.py
 
 *.graphml
 *.png
